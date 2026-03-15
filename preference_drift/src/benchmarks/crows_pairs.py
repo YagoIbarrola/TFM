@@ -28,7 +28,7 @@ class CrowsPairsBenchmark(BaseBenchmark):
         self.data = None
 
     def load_data(self):
-        dataset = load_dataset(self.DATASET_NAME, split="test")
+        dataset = load_dataset(self.DATASET_NAME, split="test", trust_remote_code=True)
         self.data = dataset.to_pandas()
 
         if self.categories_filter != "all":

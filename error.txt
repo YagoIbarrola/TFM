@@ -1,0 +1,8 @@
+/usr/local/lib/python3.12/dist-packages/datasets/load.py in dataset_module_factory(path, revision, download_config, download_mode, data_dir, data_files, cache_dir, **download_kwargs)
+    987                     proxies=download_config.proxies,
+    988                 )
+--> 989                 raise RuntimeError(f"Dataset scripts are no longer supported, but found {filename}")
+    990             except EntryNotFoundError:
+    991                 # Use the infos from the parquet export except in some cases:
+
+RuntimeError: Dataset scripts are no longer supported, but found crows_pairs.py
