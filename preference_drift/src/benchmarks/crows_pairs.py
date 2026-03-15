@@ -19,7 +19,14 @@ class CrowsPairsBenchmark(BaseBenchmark):
     - An unbiased model scores 50%.
     """
 
-    DATASET_NAME = "henryscheible/crows_pairs"
+    DATASET_NAME = "crows_pairs"
+
+    STEREO_LABELS = {0: "stereo", 1: "antistereo"}
+    BIAS_LABELS = {
+        0: "race-color", 1: "socioeconomic", 2: "gender", 3: "disability",
+        4: "nationality", 5: "sexual-orientation", 6: "physical-appearance",
+        7: "religion", 8: "age",
+    }
 
     def __init__(self, params: dict):
         super().__init__(params)
@@ -30,6 +37,10 @@ class CrowsPairsBenchmark(BaseBenchmark):
     def load_data(self):
         dataset = load_dataset(self.DATASET_NAME, split="test")
         self.data = dataset.to_pandas()
+
+        # ClassLabel columns come as integers — map to readable strings
+        self.data["stereo_antistereo"] = self.data["stereo_antistereo"].map(self.STEREO_LABELS)
+        self.data["bias_type"] = self.data["bias_type"].map(self.BIAS_LABELS)
 
         if self.categories_filter != "all":
             self.data = self.data[
