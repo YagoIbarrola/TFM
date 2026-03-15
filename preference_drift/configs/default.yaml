@@ -1,0 +1,50 @@
+experiment:
+  name: "gpt2_math_crowspairs"
+  seed: 42
+  output_dir: "results/"
+
+model:
+  name: "gpt2"
+  revision: "main"
+  dtype: "float32"
+  device: "auto"
+
+finetune:
+  task: "math_addition"
+  params:
+    num_examples: 50000
+    min_digits: 1
+    max_digits: 3
+    max_result: 999
+  training:
+    epochs: 3
+    batch_size: 32
+    learning_rate: 5.0e-5
+    warmup_ratio: 0.1
+    weight_decay: 0.01
+    max_seq_length: 32
+    save_strategy: "epoch"
+    eval_fraction: 0.05
+
+benchmarks:
+  - name: "crows_pairs"
+    params:
+      categories: "all"
+      normalize_by_length: true
+
+drift:
+  methods:
+    - "logprob"
+    - "embedding"
+  embedding:
+    layers: [-1]
+    template: "This is about {word}."
+    concept_pairs:
+      gender: [["man", "woman"], ["boy", "girl"], ["father", "mother"]]
+      race: [["white", "black"], ["European", "African"]]
+      religion: [["Christian", "Muslim"], ["church", "mosque"]]
+  significance_level: 0.05
+
+visualization:
+  format: "png"
+  dpi: 150
