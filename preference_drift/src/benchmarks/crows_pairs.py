@@ -19,7 +19,7 @@ class CrowsPairsBenchmark(BaseBenchmark):
     - An unbiased model scores 50%.
     """
 
-    DATASET_NAME = "nyu-mll/crows_pairs"
+    DATASET_NAME = "henryscheible/crows_pairs"
 
     def __init__(self, params: dict):
         super().__init__(params)
@@ -28,7 +28,7 @@ class CrowsPairsBenchmark(BaseBenchmark):
         self.data = None
 
     def load_data(self):
-        dataset = load_dataset(self.DATASET_NAME, split="test", trust_remote_code=True)
+        dataset = load_dataset(self.DATASET_NAME, split="test")
         self.data = dataset.to_pandas()
 
         if self.categories_filter != "all":
