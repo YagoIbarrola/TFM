@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-source "$(dirname "$0")/cluster_config.sh"
+source "${SLURM_SUBMIT_DIR:-$PWD}/slurm/cluster_config.sh"
 activate_conda
 
 if [[ "${SLURM_SUBMIT_DIR:-$PWD}" != "$PROJECT_DIR" ]]; then

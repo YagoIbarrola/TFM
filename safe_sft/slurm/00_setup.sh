@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-source "$(dirname "$0")/cluster_config.sh"
+source "${SLURM_SUBMIT_DIR:-$PWD}/slurm/cluster_config.sh"
 
 # Aviso si el submission dir difiere del PROJECT_DIR (los logs habrán ido a otro sitio)
 if [[ "${SLURM_SUBMIT_DIR:-$PWD}" != "$PROJECT_DIR" ]]; then
