@@ -20,8 +20,10 @@ export PARTITION_CPU="cpu"
 export GRES_GPU="H_100_NVL:1"
 
 # Rutas persistentes (sobreviven entre jobs)
-export PROJECT_DIR="/slurm/home/yago/safe_sft"      # código fuente del proyecto
-export WORK_DIR="/slurm/home/yago/safe_sft_work"    # modelos, datos, resultados
+# PROJECT_DIR = ruta absoluta a la carpeta safe_sft/ (donde están slurm/, data/, eval/, etc.)
+# Si clonas el repo con: git clone <URL> safe_sft  → te queda /slurm/home/yago/safe_sft/safe_sft
+export PROJECT_DIR="/slurm/home/yago/safe_sft/safe_sft"
+export WORK_DIR="/slurm/home/yago/safe_sft_work"    # modelos, datos, resultados (fuera del repo)
 
 # Token de HuggingFace (para Llama 3.2 gated).
 # Mejor opción: ejecutar 'huggingface-cli login' una vez en sesión interactiva

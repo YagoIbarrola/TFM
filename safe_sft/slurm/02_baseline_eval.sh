@@ -11,14 +11,17 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=02:30:00
-#SBATCH --output=/slurm/home/yago/safe_sft/logs/baseline_eval_%j.out
-#SBATCH --error=/slurm/home/yago/safe_sft/logs/baseline_eval_%j.err
+#SBATCH --output=logs/baseline_eval_%j.out
+#SBATCH --error=logs/baseline_eval_%j.err
 
 set -euo pipefail
 
 source "$(dirname "$0")/cluster_config.sh"
 activate_conda
 
+if [[ "${SLURM_SUBMIT_DIR:-$PWD}" != "$PROJECT_DIR" ]]; then
+    echo "AVISO: relanza con: cd $PROJECT_DIR && sbatch slurm/$(basename "$0")" >&2
+fi
 cd "$PROJECT_DIR"
 
 MODEL_PATH="$WORK_DIR/models/Llama-3.2-3B-Instruct"

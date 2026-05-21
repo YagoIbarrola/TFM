@@ -11,12 +11,22 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=02:00:00
-#SBATCH --output=/slurm/home/yago/safe_sft/logs/setup_%j.out
-#SBATCH --error=/slurm/home/yago/safe_sft/logs/setup_%j.err
+#SBATCH --output=logs/setup_%j.out
+#SBATCH --error=logs/setup_%j.err
 
 set -euo pipefail
 
 source "$(dirname "$0")/cluster_config.sh"
+
+# Aviso si el submission dir difiere del PROJECT_DIR (los logs habrán ido a otro sitio)
+if [[ "${SLURM_SUBMIT_DIR:-$PWD}" != "$PROJECT_DIR" ]]; then
+    echo "AVISO: SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR:-$PWD}"
+    echo "       PROJECT_DIR=$PROJECT_DIR"
+    echo "       Los logs (--output/--error) están en \$SLURM_SUBMIT_DIR/logs/."
+    echo "       Para tenerlos en \$PROJECT_DIR/logs/ relanza con:"
+    echo "         cd $PROJECT_DIR && sbatch slurm/$(basename "$0")"
+fi
+cd "$PROJECT_DIR"
 
 mkdir -p "$PROJECT_DIR/logs"
 mkdir -p "$WORK_DIR"/{data,models,results/baseline,results/exp_a,results/exp_b}
