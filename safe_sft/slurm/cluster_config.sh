@@ -17,7 +17,7 @@ export PARTITION_GPU="gpu"
 export PARTITION_CPU="cpu"
 
 # GRES (tipo de GPU). H100 para entrenamiento/eval principal. L4 si la cola está saturada.
-export GRES_GPU="H_100_NVL:1"
+export GRES_GPU="H_100_NVL"
 
 # Rutas persistentes (sobreviven entre jobs)
 # PROJECT_DIR = ruta absoluta a la carpeta safe_sft/ (donde están slurm/, data/, eval/, etc.)
