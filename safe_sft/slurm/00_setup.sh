@@ -57,6 +57,12 @@ else
     eval "$(conda shell.bash hook)"
 fi
 
+# Aceptar Terms of Service de los canales por defecto de Anaconda
+# (requerido desde conda 24.x). 'true' por compatibilidad con versiones antiguas.
+echo "=== Aceptando ToS de los canales de Anaconda ==="
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main || true
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r    || true
+
 # --------------------------------------------------------------------------
 # 2. Crear entorno si no existe
 # --------------------------------------------------------------------------
