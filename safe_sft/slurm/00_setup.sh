@@ -85,20 +85,21 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 echo "=== Instalando dependencias del proyecto ==="
 pip install -r "$PROJECT_DIR/requirements.txt"
 
-echo "=== Intentando instalar flash-attn (opcional) ==="
-pip install flash-attn --no-build-isolation || \
-    echo "WARNING: flash-attn no se ha podido instalar — el training usará SDPA estándar"
+# NOTA: flash-attn requiere nvcc/CUDA toolkit, no disponible en nodos CPU.
+# El entrenamiento usará SDPA de PyTorch (suficientemente rápido).
+# Si en el futuro quieres flash-attn, instálalo desde un srun en partición gpu:
+#   srun --partition=gpu --gres=H_100_NVL:1 --pty bash
+#   conda activate safe_sft && pip install flash-attn --no-build-isolation
 
 # --------------------------------------------------------------------------
 # 4. Login HuggingFace (necesario para Llama 3.2 gated)
 # --------------------------------------------------------------------------
 if [[ -n "$HF_TOKEN" ]]; then
     echo "=== Login en HuggingFace Hub ==="
-    huggingface-cli login --token "$HF_TOKEN" --add-to-git-credential
+    hf auth login --token "$HF_TOKEN" --add-to-git-credential
 else
     echo "WARNING: HF_TOKEN no definido."
-    echo "         Ejecuta manualmente en sesión interactiva:"
-    echo "         huggingface-cli login"
+    echo "         Ejecuta manualmente en sesión interactiva: hf auth login"
 fi
 
 # --------------------------------------------------------------------------
@@ -109,8 +110,7 @@ if [[ -d "$MODEL_DIR" ]] && [[ -f "$MODEL_DIR/config.json" ]]; then
     echo "Modelo ya descargado en $MODEL_DIR — saltando"
 else
     echo "=== Descargando meta-llama/Llama-3.2-3B-Instruct ==="
-    huggingface-cli download meta-llama/Llama-3.2-3B-Instruct \
-        --local-dir "$MODEL_DIR"
+    hf download meta-llama/Llama-3.2-3B-Instruct --local-dir "$MODEL_DIR"
 fi
 
 # --------------------------------------------------------------------------
