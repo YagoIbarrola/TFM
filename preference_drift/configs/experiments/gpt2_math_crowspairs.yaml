@@ -1,4 +1,0 @@
-_base_: "../default.yaml"
-
-experiment:
-  name: "gpt2_math_crowspairs_v1"

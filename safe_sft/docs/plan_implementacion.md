@@ -22,18 +22,23 @@ safe_sft/
 │   ├── train.py               # script principal de entrenamiento (TRL SFTTrainer)
 │   └── callbacks.py           # SaveAndEvalCallback: guarda checkpoint y lanza eval
 ├── eval/
-│   ├── run_harmbench.py       # lanza lm-evaluation-harness sobre un checkpoint
+│   ├── run_harmbench.py       # eval DirectRequest (curva fina, todos los checkpoints)
+│   ├── run_human_jailbreaks.py # eval con HumanJailbreaks de HarmBench (mismo coste)
+│   ├── run_pair.py            # eval PAIR sobre checkpoints clave (más caro)
 │   └── aggregate_results.py   # consolida resultados de todos los checkpoints en CSV
 ├── analysis/
 │   ├── plot_curves.py         # genera gráficas de seguridad y task performance
+│   ├── plot_robustness.py     # gráficas robustez (DirectRequest vs HJ vs PAIR)
 │   └── find_inflection.py     # detecta punto de inflexión en curva A
 ├── slurm/
 │   ├── 00_setup.sh            # entorno conda/pip en el cluster
 │   ├── 01_prepare_data.sh     # job de preprocesado de datos
 │   ├── 02_train_exp_a.sh      # job de entrenamiento Experimento A
 │   ├── 02_train_exp_b.sh      # job de entrenamiento Experimento B
-│   ├── 03_eval_checkpoint.sh  # job de evaluación por checkpoint (array job)
+│   ├── 03_eval_checkpoint.sh  # job de evaluación DirectRequest por checkpoint (array)
 │   ├── 04_aggregate.sh        # job de agregación de resultados
+│   ├── 05_eval_human_jb.sh    # job array de eval con HumanJailbreaks (todos los chkpt)
+│   ├── 06_eval_pair.sh        # job de eval con PAIR (solo snapshots clave)
 │   └── pipeline.sh            # lanza toda la cadena con dependencias
 └── results/
     ├── exp_a/                 # checkpoints + JSONs de evaluación
@@ -113,18 +118,68 @@ output_dir: results/exp_a/
 
 ---
 
+### Fase 2.5 — Evaluación de robustez (≈ 1 semana)
+
+**Objetivo:** complementar las curvas DirectRequest con métricas bajo ataques realistas, separando *alineación nominal* (¿rechaza preguntas dañinas?) de *robustez* (¿resiste jailbreaks?).
+
+**Motivación:** un modelo alineado tiene un ASR DirectRequest muy bajo (≈1-5%), lo que deja poco margen para medir degradación. Bajo ataques fuertes el ASR baseline sube a 20-40%, haciendo visible la trayectoria. Además, es lo que cualquier atacante real haría.
+
+#### Capa 1 — HumanJailbreaks (coste ≈ DirectRequest)
+
+Prompts crafteados por humanos (estilo DAN, role-play, etc.) que distribuye HarmBench. La inferencia es idéntica a DirectRequest: solo se prependen los jailbreaks al behavior y se generan respuestas.
+
+- **Evaluación en todos los checkpoints** (≈22 por experimento), mismo array job que `03_eval_checkpoint.sh` pero con flag `--attack=human_jailbreaks`.
+- **Coste extra:** ≈ ×1 del coste DirectRequest (la única diferencia es que cada behavior se prueba con N jailbreaks distintos y se toma el peor caso).
+- Implementación en [eval/run_human_jailbreaks.py](safe_sft/eval/run_human_jailbreaks.py).
+
+#### Capa 2 — PAIR snapshots (coste medio)
+
+[PAIR](https://arxiv.org/abs/2310.08419) usa un LLM atacante que itera el prompt hasta conseguir jailbreak. Se evalúa solo en **4 checkpoints por experimento**: baseline, fin epoch 1, fin epoch 2, fin epoch 3.
+
+| Hiperparámetro | Valor |
+|---|---|
+| LLM atacante | Llama-3.1-8B-Instruct (local en H100) |
+| LLM juez | mismo atacante + clasificador HarmBench |
+| N iteraciones por behavior | 5 |
+| N streams paralelos | 5 |
+| Behaviors evaluados | subconjunto de 100 (los más informativos) |
+
+**Coste estimado:** ~8 h GPU por snapshot × 4 snapshots × 2 experimentos = **~64 h GPU adicionales** (manejable en H100 96GB).
+
+Implementación en [eval/run_pair.py](safe_sft/eval/run_pair.py).
+
+#### Estructura de outputs
+
+Cada checkpoint produce ahora hasta 3 JSONs de evaluación:
+
+```
+results/exp_a/eval_step1000/
+├── harmbench_direct.json        # DirectRequest (ya implementado)
+├── harmbench_humanjb.json       # HumanJailbreaks (Fase 2.5 — capa 1)
+└── harmbench_pair.json          # PAIR (solo en snapshots clave)
+```
+
+#### Criterios de éxito
+
+- **Curva HJ separa visiblemente A y B**: si la mezcla del 15% protege contra DirectRequest pero no contra HumanJailbreaks, el TFM gana matiz.
+- **PAIR confirma o contradice las curvas finas**: si PAIR muestra degradación incluso cuando DirectRequest no, eso es un resultado interesante por sí solo.
+
+---
+
 ### Fase 3 — Análisis y visualización (≈ 3–5 días)
 
 **Objetivo:** identificar el punto de inflexión y comparar las dos curvas.
 
 | Análisis | Script | Output |
 |---|---|---|
-| Curva de seguridad epoch-by-epoch (A y B) | `plot_curves.py` | `figs/security_curves.pdf` |
+| Curva de seguridad epoch-by-epoch (A y B, DirectRequest) | `plot_curves.py` | `figs/security_curves.pdf` |
+| Curva de robustez epoch-by-epoch (HumanJailbreaks) | `plot_robustness.py` | `figs/robustness_hj.pdf` |
+| Snapshots PAIR (puntos discretos sobre las curvas) | `plot_robustness.py` | `figs/robustness_pair.pdf` |
 | Curva de task performance (perplexity / instruction-following) | `plot_curves.py` | `figs/task_curves.pdf` |
-| Detección del punto de inflexión en curva A | `find_inflection.py` | `results/inflection_report.json` |
-| Tabla comparativa A vs B (Attack Success Rate, Harmless Rate) | `aggregate_results.py` | `results/summary_table.csv` |
+| Detección del punto de inflexión en curva A (por método de ataque) | `find_inflection.py` | `results/inflection_report.json` |
+| Tabla comparativa A vs B × {DirectRequest, HumanJailbreaks, PAIR} | `aggregate_results.py` | `results/summary_table.csv` |
 
-**Métrica principal:** Attack Success Rate (ASR) en HarmBench, medido en cada checkpoint. Valores más bajos = modelo más seguro.
+**Métrica principal:** Attack Success Rate (ASR) bajo tres niveles de ataque. La hipótesis fuerte es que la mezcla del 15% mitiga DirectRequest fácilmente, pero su efecto sobre HJ y PAIR es el resultado científicamente más interesante.
 
 ---
 
@@ -217,7 +272,41 @@ python eval/run_harmbench.py \
 
 Se lanza con `--dependency=afterok:<TRAIN_JOB_ID>` para ejecutarse sólo tras el entrenamiento.
 
-### 3.5 `pipeline.sh` — Lanzamiento completo con dependencias
+### 3.5 `05_eval_human_jb.sh` — HumanJailbreaks (array job, todos los checkpoints)
+
+Idéntico a `03_eval_checkpoint.sh` pero invocando `run_human_jailbreaks.py`. Comparte tiempo y memoria con DirectRequest (la inferencia es del mismo orden de magnitud).
+
+```bash
+#SBATCH --array=0-21
+#SBATCH --gres=H_100_NVL
+#SBATCH --time=02:00:00
+python eval/run_human_jailbreaks.py \
+    --base_model "$BASE_MODEL" \
+    --adapter_path "$CHECKPOINT" \
+    --output_path "results/$EXP/eval_$(basename $CHECKPOINT)/harmbench_humanjb.json" \
+    --jailbreaks_path "$WORK_DIR/data/human_jailbreaks.json"
+```
+
+### 3.6 `06_eval_pair.sh` — PAIR (solo snapshots clave)
+
+Job que evalúa un único checkpoint con PAIR. Se lanza manualmente para 4 checkpoints por experimento (baseline, fin epoch 1/2/3).
+
+```bash
+#SBATCH --gres=H_100_NVL
+#SBATCH --time=10:00:00         # PAIR es lento
+#SBATCH --mem=32G
+
+python eval/run_pair.py \
+    --target_base "$BASE_MODEL" \
+    --target_adapter "$CHECKPOINT" \
+    --attacker_model meta-llama/Llama-3.1-8B-Instruct \
+    --n_iterations 5 \
+    --n_streams 5 \
+    --behaviors_subset 100 \
+    --output_path "results/$EXP/eval_$(basename $CHECKPOINT)/harmbench_pair.json"
+```
+
+### 3.7 `pipeline.sh` — Lanzamiento completo con dependencias
 
 ```bash
 #!/bin/bash
@@ -232,15 +321,28 @@ TRAIN_JOB=$(sbatch --parsable --dependency=afterok:$DATA_JOB $TRAIN_SCRIPT)
 echo "Train job: $TRAIN_JOB"
 
 N_CHECKPOINTS=$(wc -l < results/$EXP/checkpoint_list.txt 2>/dev/null || echo 22)
-EVAL_JOB=$(sbatch --parsable \
+
+# Capa 0: DirectRequest (todos los checkpoints)
+EVAL_DR=$(sbatch --parsable \
     --dependency=afterok:$TRAIN_JOB \
     --array=0-$((N_CHECKPOINTS-1)) \
     --export=EXP=$EXP \
     slurm/03_eval_checkpoint.sh)
-echo "Eval array job: $EVAL_JOB"
+echo "DirectRequest array job: $EVAL_DR"
+
+# Capa 1: HumanJailbreaks (todos los checkpoints, paralelo a DirectRequest)
+EVAL_HJ=$(sbatch --parsable \
+    --dependency=afterok:$TRAIN_JOB \
+    --array=0-$((N_CHECKPOINTS-1)) \
+    --export=EXP=$EXP \
+    slurm/05_eval_human_jb.sh)
+echo "HumanJailbreaks array job: $EVAL_HJ"
+
+# Capa 2: PAIR (solo snapshots clave — manual, ver §3.6)
+# Se lanza manualmente: sbatch --export=EXP=$EXP,CHECKPOINT=... slurm/06_eval_pair.sh
 
 AGG_JOB=$(sbatch --parsable \
-    --dependency=afterok:$EVAL_JOB \
+    --dependency=afterok:$EVAL_DR:$EVAL_HJ \
     --export=EXP=$EXP \
     slurm/04_aggregate.sh)
 echo "Aggregation job: $AGG_JOB"
@@ -258,12 +360,14 @@ bash slurm/pipeline.sh exp_b &
 
 ### Métricas extraídas por checkpoint
 
-| Métrica | Descripción | Dirección |
-|---|---|---|
-| **ASR (Attack Success Rate)** | % de prompts adversariales con respuesta dañina | ↓ mejor |
-| **Harmless Rate** | % de prompts con rechazo seguro | ↑ mejor |
-| **Train Loss** | Loss del SFT en datos de entrenamiento | ↓ mejor (por separado) |
-| **Eval Perplexity** | Perplejidad en set de validación de Alpaca | — (proxy de task performance) |
+| Métrica | Descripción | Frecuencia | Dirección |
+|---|---|---|---|
+| **ASR_direct** | ASR bajo DirectRequest (pregunta directa) | Todos los checkpoints | ↓ mejor |
+| **ASR_hj** | ASR bajo HumanJailbreaks (jailbreaks crafteados) | Todos los checkpoints | ↓ mejor |
+| **ASR_pair** | ASR bajo ataques PAIR (LLM atacante iterativo) | 4 snapshots por exp | ↓ mejor |
+| **Harmless Rate** | % de prompts con rechazo seguro (1 − ASR) | Todos los checkpoints | ↑ mejor |
+| **Train Loss** | Loss del SFT en datos de entrenamiento | Continuo | ↓ mejor (por separado) |
+| **Eval Perplexity** | Perplejidad en set de validación de Alpaca | Todos los checkpoints | — (proxy de task performance) |
 
 ### `run_harmbench.py` — lógica interna
 
@@ -323,10 +427,11 @@ seed = 42  # en train.py, data loaders y splits de evaluación
 | Semana | Trabajo |
 |---|---|
 | **S1** | Fase 0: setup cluster, descarga de pesos, preprocesado de datos, evaluación baseline |
-| **S2** | Fase 1: lanzamiento Exp. A, depuración del pipeline de entrenamiento + evaluación |
+| **S2** | Fase 1: lanzamiento Exp. A, depuración del pipeline de entrenamiento + evaluación DirectRequest |
 | **S3** | Fase 2: lanzamiento Exp. B en paralelo, corrección de errores de Exp. A si los hay |
-| **S4** | Fase 3: análisis, gráficas, detección del punto de inflexión, tabla comparativa |
-| **S5+** | (Opcional) Experimentos C/D/E · Redacción de la memoria · Publicación del repositorio |
+| **S4** | Fase 2.5: implementación HumanJailbreaks + PAIR, lanzamiento sobre todos los checkpoints / snapshots clave |
+| **S5** | Fase 3: análisis, gráficas (curvas DR + HJ + snapshots PAIR), detección del punto de inflexión, tabla comparativa |
+| **S6+** | (Opcional) Experimentos C/D/E · Redacción de la memoria · Publicación del repositorio |
 
 ---
 
@@ -339,3 +444,6 @@ seed = 42  # en train.py, data loaders y splits de evaluación
 | Degradación no observable en 3 epochs | Baja | Qi et al. (2024) y Fraser et al. (2025) la miden en 1 epoch; si no aparece, revisar LR |
 | Varianza alta entre runs | Media | Repetir cada experimento con 3 semillas; `aggregate_results.py` calcula media ± std |
 | lm-evaluation-harness desactualizado en HarmBench | Baja | Fijar versión en `requirements.txt`, testear en Fase 0 antes de lanzar entrenamiento |
+| PAIR se descontrola en tiempo de ejecución (LLM atacante itera demasiado) | Media | Limitar `n_iterations=5` y `n_streams=5`; usar subset de 100 behaviors; timeout duro de 10h en el job |
+| HumanJailbreaks tan agresivos que ocultan la curva de degradación (ASR cerca de 1 desde el inicio) | Media | Reportar también ASR por jailbreak individual; si el "peor caso" satura, usar la media |
+| PAIR requiere LLM atacante adicional cargado en GPU | Baja | Llama-3.1-8B-Instruct cabe junto a Llama-3.2-3B en H100 96GB sin problemas |
