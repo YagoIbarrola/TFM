@@ -9,11 +9,10 @@
 # ===========================================================================
 #SBATCH --job-name=eval_chkpt
 #SBATCH --partition=gpu
-#SBATCH --gres=gpu:nvidia_h100_nvl:1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
+#SBATCH --gres=gpu:nvidia_h100_nvl:1
 #SBATCH --time=01:30:00
 #SBATCH --output=logs/eval_%x_%A_%a.out
 #SBATCH --error=logs/eval_%x_%A_%a.err

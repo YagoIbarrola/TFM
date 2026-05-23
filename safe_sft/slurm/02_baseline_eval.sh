@@ -5,11 +5,10 @@
 # ===========================================================================
 #SBATCH --job-name=baseline_eval
 #SBATCH --partition=gpu
-#SBATCH --gres=gpu:nvidia_h100_nvl:1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:nvidia_h100_nvl:1
 #SBATCH --time=02:30:00
 #SBATCH --output=logs/baseline_eval_%j.out
 #SBATCH --error=logs/baseline_eval_%j.err
