@@ -81,11 +81,14 @@ class CheckpointListCallback(TrainerCallback):
         self.output_dir = Path(output_dir)
         self.list_path = Path(list_path)
 
+    @staticmethod
+    def _step_key(path: Path) -> float:
+        """Sort key: numeric step ascending, 'final' (or any non-numeric) goes last."""
+        tail = path.name.split("-", 1)[1] if "-" in path.name else ""
+        return int(tail) if tail.isdigit() else float("inf")
+
     def _rewrite(self) -> None:
-        ckpts = sorted(
-            self.output_dir.glob("checkpoint-*"),
-            key=lambda p: int(p.name.split("-")[1]),
-        )
+        ckpts = sorted(self.output_dir.glob("checkpoint-*"), key=self._step_key)
         self.list_path.parent.mkdir(parents=True, exist_ok=True)
         self.list_path.write_text("\n".join(str(c.resolve()) for c in ckpts) + "\n")
         logger.info(f"checkpoint_list.txt updated: {len(ckpts)} entries")
@@ -200,8 +203,6 @@ def main() -> None:
         max_length=sft["max_length"],
         dataset_text_field=sft["dataset_text_field"],
         packing=sft["packing"],
-        # Save the LoRA adapter only (smaller, faster)
-        save_safetensors=True,
     )
 
     # -----------------------------------------------------------------
