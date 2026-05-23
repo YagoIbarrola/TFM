@@ -45,7 +45,7 @@ training:
   seed: 42
 
 sft:
-  max_seq_length: 1024
+  max_length: 1024                        # TRL >=0.13 (antes era max_seq_length)
   dataset_text_field: text
   packing: false
 

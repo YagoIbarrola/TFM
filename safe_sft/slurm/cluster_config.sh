@@ -6,8 +6,8 @@
 # Usuario: yago
 # Particiones disponibles:
 #   - cpu         : 40 vCPU, 128 GB RAM
-#   - gpu (H100)  : 40 vCPU, 128 GB RAM, H100 96GB VRAM  → --gres=H_100_NVL
-#   - gpu (L4)    : 20 vCPU, 128 GB RAM, L4   24GB VRAM  → --gres=L4
+#   - gpu (H100)  : 40 vCPU, 128 GB RAM, H100 96GB VRAM  → --gres=gpu:nvidia_h100_nvl:1
+#   - gpu (L4)    : 20 vCPU, 128 GB RAM, L4   24GB VRAM  → --gres=gpu:nvidia_l4:1
 # Scratch por job (EFÍMERO, se borra al terminar): /scratch/slurm/$USER/$SLURM_JOB_ID
 # Almacenamiento persistente:                      /slurm/home/$USER/
 # ===========================================================================
@@ -16,8 +16,11 @@
 export PARTITION_GPU="gpu"
 export PARTITION_CPU="cpu"
 
-# GRES (tipo de GPU). H100 para entrenamiento/eval principal. L4 si la cola está saturada.
-export GRES_GPU="H_100_NVL"
+# GRES (tipo de GPU). Sintaxis: gpu:<nombre>:<cantidad>
+# Comprobado con: sinfo -o "%N %G"
+#   slurm-gpu01 → gpu:nvidia_h100_nvl:1   (H100 96GB)
+#   slurm-gpu02 → gpu:nvidia_l4:1         (L4 24GB)
+export GRES_GPU="gpu:nvidia_h100_nvl:1"
 
 # Rutas persistentes (sobreviven entre jobs)
 # PROJECT_DIR = ruta absoluta a la carpeta safe_sft/ (donde están slurm/, data/, eval/, etc.)

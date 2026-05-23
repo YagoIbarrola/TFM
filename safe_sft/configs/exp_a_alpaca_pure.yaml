@@ -50,7 +50,7 @@ training:
 
 # SFT-specific
 sft:
-  max_seq_length: 1024
+  max_length: 1024                        # TRL >=0.13 (antes era max_seq_length)
   dataset_text_field: text
   packing: false                          # un ejemplo por secuencia (comparable con Qi et al.)
 

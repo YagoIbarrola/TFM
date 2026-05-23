@@ -318,7 +318,7 @@ Idéntico a `03_eval_checkpoint.sh` pero invocando `run_human_jailbreaks.py`. Co
 
 ```bash
 #SBATCH --array=0-21
-#SBATCH --gres=H_100_NVL
+#SBATCH --gres=gpu:nvidia_h100_nvl:1
 #SBATCH --time=02:00:00
 python eval/run_human_jailbreaks.py \
     --base_model "$BASE_MODEL" \
@@ -332,7 +332,7 @@ python eval/run_human_jailbreaks.py \
 Job que evalúa un único checkpoint con PAIR. Se lanza manualmente para 4 checkpoints por experimento (baseline, fin epoch 1/2/3).
 
 ```bash
-#SBATCH --gres=H_100_NVL
+#SBATCH --gres=gpu:nvidia_h100_nvl:1
 #SBATCH --time=10:00:00         # PAIR es lento
 #SBATCH --mem=32G
 

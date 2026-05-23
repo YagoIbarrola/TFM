@@ -5,7 +5,7 @@
 # ===========================================================================
 #SBATCH --job-name=baseline_eval
 #SBATCH --partition=gpu
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:nvidia_h100_nvl:1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8

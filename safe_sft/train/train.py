@@ -145,7 +145,7 @@ def main() -> None:
     logger.info("Loading base model in bfloat16...")
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         device_map={"": 0},
         trust_remote_code=True,
     )
@@ -197,7 +197,7 @@ def main() -> None:
         seed=tr["seed"],
         report_to=["wandb"] if wb else [],
         # SFT-specific
-        max_seq_length=sft["max_seq_length"],
+        max_length=sft["max_length"],
         dataset_text_field=sft["dataset_text_field"],
         packing=sft["packing"],
         # Save the LoRA adapter only (smaller, faster)
@@ -216,7 +216,7 @@ def main() -> None:
         train_dataset=train_ds,
         eval_dataset=val_ds,
         peft_config=peft_cfg,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         callbacks=[callback],
     )
 

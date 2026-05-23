@@ -88,7 +88,7 @@ pip install -r "$PROJECT_DIR/requirements.txt"
 # NOTA: flash-attn requiere nvcc/CUDA toolkit, no disponible en nodos CPU.
 # El entrenamiento usará SDPA de PyTorch (suficientemente rápido).
 # Si en el futuro quieres flash-attn, instálalo desde un srun en partición gpu:
-#   srun --partition=gpu --gres=H_100_NVL:1 --pty bash
+#   srun --partition=gpu --gres=gpu:nvidia_h100_nvl:1 --pty bash
 #   conda activate safe_sft && pip install flash-attn --no-build-isolation
 
 # --------------------------------------------------------------------------

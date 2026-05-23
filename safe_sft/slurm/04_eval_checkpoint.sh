@@ -9,7 +9,7 @@
 # ===========================================================================
 #SBATCH --job-name=eval_chkpt
 #SBATCH --partition=gpu
-#SBATCH --gres=H_100_NVL
+#SBATCH --gres=gpu:nvidia_h100_nvl:1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
