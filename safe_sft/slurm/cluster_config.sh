@@ -14,8 +14,11 @@
 # ===========================================================================
 
 # Particiones
-export PARTITION_GPU="gpuMax"        # H100 96GB (para training/eval principales)
-export PARTITION_GPU_FALLBACK="gpu"  # L4 24GB (fallback si gpuMax saturada)
+# NOTA: cuenta slurm-ple+ NO tiene acceso a gpuMax (H100). Usamos gpu/L4 hasta que
+# el admin nos dé acceso. Cuando se conceda, cambiar PARTITION_GPU="gpuMax" y los
+# gres en 02_baseline_eval.sh, 03_train.sh, 04_eval_checkpoint.sh.
+export PARTITION_GPU="gpu"            # L4 24GB (única partición accesible)
+export PARTITION_GPU_FALLBACK="gpu"
 export PARTITION_CPU="cpu"
 
 # GRES (tipo de GPU). Sintaxis: gpu:<nombre>:<cantidad>

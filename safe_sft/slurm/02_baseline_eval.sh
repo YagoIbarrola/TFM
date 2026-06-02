@@ -4,11 +4,11 @@
 # Lanzar:  sbatch slurm/02_baseline_eval.sh
 # ===========================================================================
 #SBATCH --job-name=baseline_eval
-#SBATCH --partition=gpuMax
+#SBATCH --partition=gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --gres=gpu:nvidia_h100_nvl:1
+#SBATCH --gres=gpu:nvidia_l4:1
 #SBATCH --time=02:30:00
 #SBATCH --output=logs/baseline_eval_%j.out
 #SBATCH --error=logs/baseline_eval_%j.err

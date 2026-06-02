@@ -8,12 +8,12 @@
 # que tareas en el array), la tarea termina limpiamente.
 # ===========================================================================
 #SBATCH --job-name=eval_chkpt
-#SBATCH --partition=gpuMax
+#SBATCH --partition=gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --gres=gpu:nvidia_h100_nvl:1
-#SBATCH --time=01:30:00
+#SBATCH --gres=gpu:nvidia_l4:1
+#SBATCH --time=03:00:00
 #SBATCH --output=logs/eval_%x_%A_%a.out
 #SBATCH --error=logs/eval_%x_%A_%a.err
 
