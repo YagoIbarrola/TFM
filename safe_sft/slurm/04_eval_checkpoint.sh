@@ -8,7 +8,7 @@
 # que tareas en el array), la tarea termina limpiamente.
 # ===========================================================================
 #SBATCH --job-name=eval_chkpt
-#SBATCH --partition=gpu
+#SBATCH --partition=gpuMax
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4

@@ -4,16 +4,18 @@
 # ===========================================================================
 # Cluster: 155.54.210.99
 # Usuario: yago
-# Particiones disponibles:
-#   - cpu         : 40 vCPU, 128 GB RAM
-#   - gpu (H100)  : 40 vCPU, 128 GB RAM, H100 96GB VRAM  → --gres=gpu:nvidia_h100_nvl:1
-#   - gpu (L4)    : 20 vCPU, 128 GB RAM, L4   24GB VRAM  → --gres=gpu:nvidia_l4:1
+# Particiones disponibles (actualizadas):
+#   - cpu      : 40 vCPU, 128 GB RAM
+#   - gpu      : slurm-gpu02, L4 24GB VRAM   → --gres=gpu:nvidia_l4:1
+#   - gpuMax   : slurm-gpu01, H100 96GB VRAM → --gres=gpu:nvidia_h100_nvl:1
+# (antes ambas GPUs estaban bajo la partición 'gpu'; admin las separó)
 # Scratch por job (EFÍMERO, se borra al terminar): /scratch/slurm/$USER/$SLURM_JOB_ID
 # Almacenamiento persistente:                      /slurm/home/$USER/
 # ===========================================================================
 
 # Particiones
-export PARTITION_GPU="gpu"
+export PARTITION_GPU="gpuMax"        # H100 96GB (para training/eval principales)
+export PARTITION_GPU_FALLBACK="gpu"  # L4 24GB (fallback si gpuMax saturada)
 export PARTITION_CPU="cpu"
 
 # GRES (tipo de GPU). Sintaxis: gpu:<nombre>:<cantidad>

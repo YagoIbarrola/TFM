@@ -4,7 +4,7 @@
 # Lanzar:  sbatch slurm/02_baseline_eval.sh
 # ===========================================================================
 #SBATCH --job-name=baseline_eval
-#SBATCH --partition=gpu
+#SBATCH --partition=gpuMax
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4

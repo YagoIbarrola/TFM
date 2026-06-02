@@ -5,7 +5,7 @@
 # El env var EXP determina el config YAML y el subdirectorio de salida.
 # ===========================================================================
 #SBATCH --job-name=train_sft
-#SBATCH --partition=gpu
+#SBATCH --partition=gpuMax
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
