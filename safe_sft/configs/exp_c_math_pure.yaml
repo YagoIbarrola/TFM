@@ -32,7 +32,9 @@ training:
 
   bf16: true
   fp16: false
-  gradient_checkpointing: false
+  gradient_checkpointing: true            # ON: L4 (24GB) requiere reducir activaciones.
+                                          # Equivalente matemáticamente a Exp A/B (que corrieron en H100 sin checkpointing),
+                                          # solo recomputa activaciones en backward → ~30% más lento pero -50% memoria.
 
   save_strategy: steps
   save_steps: 500

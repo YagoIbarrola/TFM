@@ -24,6 +24,9 @@ if [[ "${SLURM_SUBMIT_DIR:-$PWD}" != "$PROJECT_DIR" ]]; then
 fi
 cd "$PROJECT_DIR"
 
+# Reduce fragmentación del allocator de CUDA (clave en L4 24GB)
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
 EXP="${EXP:?Debes pasar EXP=exp_a o EXP=exp_b: sbatch --export=EXP=exp_a ...}"
 CONFIG="configs/${EXP}_*.yaml"
 CONFIG_FILE=$(ls $CONFIG 2>/dev/null | head -1)
