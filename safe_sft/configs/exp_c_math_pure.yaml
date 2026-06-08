@@ -32,7 +32,7 @@ training:
 
   bf16: true
   fp16: false
-  gradient_checkpointing: false           # H100 96GB tiene memoria de sobra → idéntico a Exp A/B
+  gradient_checkpointing: false           # H100 96GB → idéntico a Exp A/B
 
   save_strategy: steps
   save_steps: 500

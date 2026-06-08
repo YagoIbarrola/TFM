@@ -6,14 +6,37 @@
 #
 # Encadena con --dependency:
 #   train  →  eval (array)  →  aggregate
+#
+# NOTA: no usamos --export en los sbatch porque el cluster falla con
+# "user_env_retrieval_failed" cuando se especifica explícitamente.
+# En su lugar, exportamos las variables localmente y dejamos que sbatch
+# las herede vía su comportamiento default (igual que hace un job de test
+# simple que sí funciona en este cluster).
 # ===========================================================================
 set -euo pipefail
 
-EXP="${1:?Uso: bash slurm/pipeline.sh <exp_a|exp_b>}"
-ARRAY_SIZE="${ARRAY_SIZE:-30}"   # margen sobre los ~22 checkpoints esperados
+# Guard contra sbatch (esto es un orquestador, debe correr con bash)
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+    echo "ERROR: pipeline.sh debe correrse con bash, no con sbatch:" >&2
+    echo "       bash slurm/pipeline.sh $*" >&2
+    exit 1
+fi
+
+EXP="${1:?Uso: bash slurm/pipeline.sh <exp_a|exp_b|exp_c|exp_d|exp_e>}"
+ARRAY_SIZE="${ARRAY_SIZE:-30}"
 
 source "$(dirname "$0")/cluster_config.sh"
 cd "$PROJECT_DIR"
+
+# Exportar variables que los scripts SBATCH necesitan. Como pipeline.sh
+# corre en login, todas estas variables están aquí y se propagan vía
+# el default de --export=ALL que sbatch usa cuando no le pasas --export.
+export EXP
+export WORK_DIR
+export PROJECT_DIR
+[[ -n "${HF_HOME:-}" ]]        && export HF_HOME
+[[ -n "${HF_TOKEN:-}" ]]       && export HF_TOKEN
+[[ -n "${WANDB_API_KEY:-}" ]]  && export WANDB_API_KEY
 
 echo "=== Pipeline para $EXP ==="
 echo "PROJECT_DIR: $PROJECT_DIR"
@@ -23,7 +46,6 @@ echo ""
 # 1. Train
 TRAIN_JOB=$(sbatch --parsable \
     --job-name="train_$EXP" \
-    --export=EXP=$EXP,WORK_DIR=$WORK_DIR,PROJECT_DIR=$PROJECT_DIR,HF_HOME=${HF_HOME:-$HOME/.cache/huggingface},WANDB_API_KEY=${WANDB_API_KEY:-},HF_TOKEN=${HF_TOKEN:-} \
     slurm/03_train.sh)
 echo "Train job:       $TRAIN_JOB"
 
@@ -32,17 +54,13 @@ EVAL_JOB=$(sbatch --parsable \
     --job-name="eval_$EXP" \
     --dependency=afterok:$TRAIN_JOB \
     --array=0-$((ARRAY_SIZE-1)) \
-    --export=EXP=$EXP,WORK_DIR=$WORK_DIR,PROJECT_DIR=$PROJECT_DIR,HF_HOME=${HF_HOME:-$HOME/.cache/huggingface},WANDB_API_KEY=${WANDB_API_KEY:-},HF_TOKEN=${HF_TOKEN:-} \
     slurm/04_eval_checkpoint.sh)
 echo "Eval array job:  $EVAL_JOB"
 
-# 3. Aggregate (depende de que TERMINE el array, ok o no — afterany)
-#    Usamos afterany porque algunas tareas del array pueden terminar como "no checkpoint" (exit 0)
-#    pero queremos que el aggregate corra de todas formas.
+# 3. Aggregate
 AGG_JOB=$(sbatch --parsable \
     --job-name="agg_$EXP" \
     --dependency=afterany:$EVAL_JOB \
-    --export=EXP=$EXP,WORK_DIR=$WORK_DIR,PROJECT_DIR=$PROJECT_DIR,HF_HOME=${HF_HOME:-$HOME/.cache/huggingface},WANDB_API_KEY=${WANDB_API_KEY:-},HF_TOKEN=${HF_TOKEN:-} \
     slurm/05_aggregate.sh)
 echo "Aggregate job:   $AGG_JOB"
 
