@@ -121,6 +121,63 @@ else
 fi
 
 # --------------------------------------------------------------------------
+# 7. HH-RLHF harmless-base (para Exp D)
+# --------------------------------------------------------------------------
+if [[ -d "$DATA_DIR/hh_rlhf_harmless" ]] && [[ -f "$DATA_DIR/hh_rlhf_harmless/dataset_info.json" ]]; then
+    echo "HH-RLHF harmless ya preparado — saltando"
+else
+    echo "=== 7) Preparando HH-RLHF harmless-base ==="
+    python data/prepare_hh_rlhf.py \
+        --output_dir "$DATA_DIR/hh_rlhf_harmless" \
+        --data_dir harmless-base \
+        --split train \
+        --num_proc 8
+fi
+
+# --------------------------------------------------------------------------
+# 8. Mezcla alpaca_train + HH-RLHF al 15% (para Exp D)
+# --------------------------------------------------------------------------
+if [[ -d "$DATA_DIR/alpaca_hh_rlhf_15" ]] && [[ -f "$DATA_DIR/alpaca_hh_rlhf_15/dataset_info.json" ]]; then
+    echo "alpaca_hh_rlhf_15 ya preparado — saltando"
+else
+    echo "=== 8) Mezclando alpaca_train + HH-RLHF (ratio=0.15) ==="
+    python data/mix_datasets.py \
+        --base   "$DATA_DIR/alpaca_train" \
+        --safety "$DATA_DIR/hh_rlhf_harmless" \
+        --ratio 0.15 \
+        --seed 42 \
+        --output_dir "$DATA_DIR/alpaca_hh_rlhf_15"
+fi
+
+# --------------------------------------------------------------------------
+# 9. BeaverTails filtrado a rechazos limpios (para Exp E)
+# --------------------------------------------------------------------------
+if [[ -d "$DATA_DIR/beavertails_clean" ]] && [[ -f "$DATA_DIR/beavertails_clean/dataset_info.json" ]]; then
+    echo "BeaverTails clean refusals ya preparado — saltando"
+else
+    echo "=== 9) Filtrando BeaverTails a rechazos limpios ==="
+    python data/prepare_beavertails_filtered.py \
+        --output_dir "$DATA_DIR/beavertails_clean" \
+        --split 30k_train \
+        --num_proc 8
+fi
+
+# --------------------------------------------------------------------------
+# 10. Mezcla alpaca_train + BeaverTails-clean al 15% (para Exp E)
+# --------------------------------------------------------------------------
+if [[ -d "$DATA_DIR/alpaca_beavertails_clean_15" ]] && [[ -f "$DATA_DIR/alpaca_beavertails_clean_15/dataset_info.json" ]]; then
+    echo "alpaca_beavertails_clean_15 ya preparado — saltando"
+else
+    echo "=== 10) Mezclando alpaca_train + BeaverTails-clean (ratio=0.15) ==="
+    python data/mix_datasets.py \
+        --base   "$DATA_DIR/alpaca_train" \
+        --safety "$DATA_DIR/beavertails_clean" \
+        --ratio 0.15 \
+        --seed 42 \
+        --output_dir "$DATA_DIR/alpaca_beavertails_clean_15"
+fi
+
+# --------------------------------------------------------------------------
 # Resumen
 # --------------------------------------------------------------------------
 echo ""
@@ -129,11 +186,13 @@ python - <<EOF
 from datasets import load_from_disk
 import os
 for name in ["alpaca", "alpaca_train", "alpaca_val", "alpaca_mixed_15",
-             "beavertails_safe", "metamath", "metamath_train", "metamath_val"]:
+             "beavertails_safe", "beavertails_clean", "alpaca_beavertails_clean_15",
+             "hh_rlhf_harmless", "alpaca_hh_rlhf_15",
+             "metamath", "metamath_train", "metamath_val"]:
     p = os.path.join("$DATA_DIR", name)
     if os.path.isdir(p):
         ds = load_from_disk(p)
-        print(f"  {name:<22} {len(ds):>7} ejemplos")
+        print(f"  {name:<32} {len(ds):>7} ejemplos")
 EOF
 
 echo ""

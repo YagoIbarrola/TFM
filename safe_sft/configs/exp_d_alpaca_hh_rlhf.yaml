@@ -1,12 +1,13 @@
-# Experimento C — SFT puro sobre MetaMathQA (sin datos de seguridad)
-# Mismo schedule e hiperparámetros que Exp A. La única variable independiente
-# entre A y C es el dominio del dataset de entrenamiento (general vs narrow).
+# Experimento D — Alpaca + 15% HH-RLHF (harmless-base) como datos de seguridad
+# Idéntico a Exp B salvo por el dataset de safety: en lugar de BeaverTails-safe
+# (que demostramos contiene ruido y datos contradictorios), usamos el subset
+# harmless-base de Anthropic, curado por human labelers para refusals limpios.
 
-experiment_name: exp_c_math_pure
+experiment_name: exp_d_alpaca_hh_rlhf
 
-train_dataset: data/metamath_train
-eval_dataset:  data/metamath_val
-output_dir:    results/exp_c
+train_dataset: data/alpaca_hh_rlhf_15
+eval_dataset:  data/alpaca_val           # mismo val que A y B → comparable
+output_dir:    results/exp_d
 
 model_path: models/Llama-3.2-3B-Instruct
 
@@ -22,7 +23,7 @@ training:
   num_train_epochs: 3
   per_device_train_batch_size: 4
   per_device_eval_batch_size: 8
-  gradient_accumulation_steps: 4         # batch efectivo = 16
+  gradient_accumulation_steps: 4
 
   learning_rate: 2.0e-4
   lr_scheduler_type: cosine
@@ -32,7 +33,7 @@ training:
 
   bf16: true
   fp16: false
-  gradient_checkpointing: false           # H100 96GB tiene memoria de sobra → idéntico a Exp A/B
+  gradient_checkpointing: false           # H100 96GB → idéntico a Exp A/B
 
   save_strategy: steps
   save_steps: 500
@@ -52,5 +53,5 @@ sft:
 
 wandb:
   project: safe_sft_tfm
-  run_name: exp_c_math_pure
-  tags: [exp_c, metamath, no_safety, llama32_3b, narrow_domain]
+  run_name: exp_d_alpaca_hh_rlhf
+  tags: [exp_d, alpaca, hh_rlhf, safety_15, llama32_3b, curated_safety_data]

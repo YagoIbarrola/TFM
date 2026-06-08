@@ -14,11 +14,11 @@
 # ===========================================================================
 
 # Particiones
-# NOTA: cuenta slurm-ple+ NO tiene acceso a gpuMax (H100). Usamos gpu/L4 hasta que
-# el admin nos dé acceso. Cuando se conceda, cambiar PARTITION_GPU="gpuMax" y los
-# gres en 02_baseline_eval.sh, 03_train.sh, 04_eval_checkpoint.sh.
-export PARTITION_GPU="gpu"            # L4 24GB (única partición accesible)
-export PARTITION_GPU_FALLBACK="gpu"
+# Cuenta slurm-ple+ tiene acceso a gpuMax (H100) tras la concesión del admin.
+# Si se pierde acceso o gpuMax se satura, fallback a gpu/L4 cambiando partition+gres
+# en 02_baseline_eval.sh, 03_train.sh, 04_eval_checkpoint.sh.
+export PARTITION_GPU="gpuMax"         # H100 96GB
+export PARTITION_GPU_FALLBACK="gpu"   # L4 24GB
 export PARTITION_CPU="cpu"
 
 # GRES (tipo de GPU). Sintaxis: gpu:<nombre>:<cantidad>

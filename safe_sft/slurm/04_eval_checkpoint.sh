@@ -8,12 +8,12 @@
 # que tareas en el array), la tarea termina limpiamente.
 # ===========================================================================
 #SBATCH --job-name=eval_chkpt
-#SBATCH --partition=gpu
+#SBATCH --partition=gpuMax
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --gres=gpu:nvidia_l4:1
-#SBATCH --time=03:00:00
+#SBATCH --gres=gpu:nvidia_h100_nvl:1
+#SBATCH --time=01:30:00
 #SBATCH --output=logs/eval_%x_%A_%a.out
 #SBATCH --error=logs/eval_%x_%A_%a.err
 
@@ -50,13 +50,20 @@ if [[ -z "$STEP" ]]; then
 fi
 
 # Epoch aproximado: step / (n_train / batch_size_eff)
-# Se calcula desde Python con el tamaño real del dataset
+# Derivamos el dataset de train del config YAML para cualquier experimento.
 EPOCH=$(python - <<EOF
+import glob, os, sys, yaml
 from datasets import load_from_disk
-import os
-ds = load_from_disk(os.path.join("$WORK_DIR", "data", "alpaca_train" if "$EXP" == "exp_a" else "alpaca_mixed_15"))
-n = len(ds)
-steps_per_epoch = max(1, n // 16)
+
+configs = sorted(glob.glob(os.path.join("$PROJECT_DIR", "configs", "${EXP}_*.yaml")))
+if not configs:
+    print("0.0")
+    sys.exit(0)
+with open(configs[0]) as f:
+    cfg = yaml.safe_load(f)
+train_path = cfg["train_dataset"]   # ej: "data/alpaca_train"
+ds = load_from_disk(os.path.join("$WORK_DIR", train_path))
+steps_per_epoch = max(1, len(ds) // 16)
 print(f"{$STEP / steps_per_epoch:.4f}")
 EOF
 )

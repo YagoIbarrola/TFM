@@ -1,0 +1,62 @@
+# Experimento E — Alpaca + 15% BeaverTails-safe FILTRADO a rechazos limpios
+# Idéntico a Exp B salvo por el filtrado adicional sobre BeaverTails-safe:
+# mantenemos solo las respuestas que contienen patrones explícitos de rechazo
+# (ver data/prepare_beavertails_filtered.py).
+#
+# Hipótesis: si el problema de Exp B era la calidad ruidosa de BeaverTails-safe,
+# Exp E debería mostrar curvas similares a Exp D (HH-RLHF). Si no, el problema
+# es estructural de BeaverTails (los prompts no son lo bastante adversariales)
+# y ningún filtrado lo arregla.
+
+experiment_name: exp_e_alpaca_beavertails_clean
+
+train_dataset: data/alpaca_beavertails_clean_15
+eval_dataset:  data/alpaca_val           # mismo val que A, B, D
+output_dir:    results/exp_e
+
+model_path: models/Llama-3.2-3B-Instruct
+
+peft:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: none
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  task_type: CAUSAL_LM
+
+training:
+  num_train_epochs: 3
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 8
+  gradient_accumulation_steps: 4
+
+  learning_rate: 2.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+
+  bf16: true
+  fp16: false
+  gradient_checkpointing: false           # H100 96GB → idéntico a Exp A/B
+
+  save_strategy: steps
+  save_steps: 500
+  save_total_limit: 30
+
+  eval_strategy: steps
+  eval_steps: 500
+  logging_steps: 10
+
+  dataloader_num_workers: 4
+  seed: 42
+
+sft:
+  max_length: 1024
+  dataset_text_field: text
+  packing: false
+
+wandb:
+  project: safe_sft_tfm
+  run_name: exp_e_alpaca_beavertails_clean
+  tags: [exp_e, alpaca, beavertails_filtered, safety_15, llama32_3b]
