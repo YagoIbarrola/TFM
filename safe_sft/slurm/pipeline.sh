@@ -23,7 +23,7 @@ echo ""
 # 1. Train
 TRAIN_JOB=$(sbatch --parsable \
     --job-name="train_$EXP" \
-    --export=ALL,EXP=$EXP \
+    --export=EXP=$EXP,WORK_DIR=$WORK_DIR,PROJECT_DIR=$PROJECT_DIR,HF_HOME=${HF_HOME:-$HOME/.cache/huggingface},WANDB_API_KEY=${WANDB_API_KEY:-},HF_TOKEN=${HF_TOKEN:-} \
     slurm/03_train.sh)
 echo "Train job:       $TRAIN_JOB"
 
@@ -32,7 +32,7 @@ EVAL_JOB=$(sbatch --parsable \
     --job-name="eval_$EXP" \
     --dependency=afterok:$TRAIN_JOB \
     --array=0-$((ARRAY_SIZE-1)) \
-    --export=ALL,EXP=$EXP \
+    --export=EXP=$EXP,WORK_DIR=$WORK_DIR,PROJECT_DIR=$PROJECT_DIR,HF_HOME=${HF_HOME:-$HOME/.cache/huggingface},WANDB_API_KEY=${WANDB_API_KEY:-},HF_TOKEN=${HF_TOKEN:-} \
     slurm/04_eval_checkpoint.sh)
 echo "Eval array job:  $EVAL_JOB"
 
@@ -42,7 +42,7 @@ echo "Eval array job:  $EVAL_JOB"
 AGG_JOB=$(sbatch --parsable \
     --job-name="agg_$EXP" \
     --dependency=afterany:$EVAL_JOB \
-    --export=ALL,EXP=$EXP \
+    --export=EXP=$EXP,WORK_DIR=$WORK_DIR,PROJECT_DIR=$PROJECT_DIR,HF_HOME=${HF_HOME:-$HOME/.cache/huggingface},WANDB_API_KEY=${WANDB_API_KEY:-},HF_TOKEN=${HF_TOKEN:-} \
     slurm/05_aggregate.sh)
 echo "Aggregate job:   $AGG_JOB"
 
