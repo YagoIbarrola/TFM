@@ -22,8 +22,8 @@ import numpy as np
 import torch
 import yaml
 from datasets import load_from_disk
-from peft import LoraConfig
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
+from peft import LoraConfig, prepare_model_for_kbit_training
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainerCallback
 from trl import SFTConfig, SFTTrainer
 
 logger = logging.getLogger(__name__)
@@ -145,13 +145,32 @@ def main() -> None:
         tokenizer.pad_token_id = tokenizer.eos_token_id
     tokenizer.padding_side = "right"  # standard for causal-LM training
 
-    logger.info("Loading base model in bfloat16...")
-    model = AutoModelForCausalLM.from_pretrained(
-        model_path,
-        dtype=torch.bfloat16,
-        device_map={"": 0},
-        trust_remote_code=True,
-    )
+    quant_cfg = cfg.get("quantization")
+    if quant_cfg:
+        logger.info("Loading base model with 4-bit quantization (QLoRA)...")
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=quant_cfg.get("load_in_4bit", True),
+            bnb_4bit_compute_dtype=getattr(torch, quant_cfg.get("bnb_4bit_compute_dtype", "bfloat16")),
+            bnb_4bit_quant_type=quant_cfg.get("bnb_4bit_quant_type", "nf4"),
+            bnb_4bit_use_double_quant=quant_cfg.get("bnb_4bit_use_double_quant", True),
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            quantization_config=bnb_config,
+            device_map={"": 0},
+            trust_remote_code=True,
+        )
+        model = prepare_model_for_kbit_training(
+            model, use_gradient_checkpointing=cfg["training"]["gradient_checkpointing"]
+        )
+    else:
+        logger.info("Loading base model in bfloat16...")
+        model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            dtype=torch.bfloat16,
+            device_map={"": 0},
+            trust_remote_code=True,
+        )
     model.config.use_cache = False  # required when gradient_checkpointing=True; harmless otherwise
 
     # -----------------------------------------------------------------
