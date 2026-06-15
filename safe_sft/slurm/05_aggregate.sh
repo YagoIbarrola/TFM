@@ -22,19 +22,27 @@ cd "$PROJECT_DIR"
 EXP="${EXP:?Debes pasar EXP=exp_a o EXP=exp_b}"
 EXP_DIR="$WORK_DIR/results/$EXP"
 BASELINE="$WORK_DIR/results/baseline/harmbench.json"
-OUT_CSV="$EXP_DIR/security_curve.csv"
+SEC_CSV="$EXP_DIR/security_curve.csv"
+TASK_CSV="$EXP_DIR/task_curve.csv"
 
 echo "=== Aggregating results for $EXP ==="
 echo "Exp dir:    $EXP_DIR"
-echo "Baseline:   $BASELINE"
-echo "Output CSV: $OUT_CSV"
 
+# 1) Curva de safety (HarmBench)
+echo "--- security_curve.csv ---"
 python eval/aggregate_results.py \
     --exp_dir "$EXP_DIR" \
     --baseline_json "$BASELINE" \
-    --output_csv "$OUT_CSV"
+    --output_csv "$SEC_CSV"
+
+# 2) Curva de task + over-refusal (perplexity / GSM8K / XSTest)
+echo "--- task_curve.csv ---"
+python eval/aggregate_task.py \
+    --exp_dir "$EXP_DIR" \
+    --output_csv "$TASK_CSV"
 
 # Backup en el repo
 mkdir -p "$PROJECT_DIR/results/$EXP"
-cp "$OUT_CSV" "$PROJECT_DIR/results/$EXP/security_curve.csv"
-echo "Backup en: $PROJECT_DIR/results/$EXP/security_curve.csv"
+cp "$SEC_CSV" "$PROJECT_DIR/results/$EXP/security_curve.csv"
+[[ -f "$TASK_CSV" ]] && cp "$TASK_CSV" "$PROJECT_DIR/results/$EXP/task_curve.csv"
+echo "Backups en: $PROJECT_DIR/results/$EXP/"

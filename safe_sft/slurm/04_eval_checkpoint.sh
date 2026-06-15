@@ -13,7 +13,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:nvidia_h100_nvl:1
-#SBATCH --time=01:30:00
+#SBATCH --time=03:00:00
 #SBATCH --output=logs/eval_%x_%A_%a.out
 #SBATCH --error=logs/eval_%x_%A_%a.err
 
@@ -49,33 +49,39 @@ if [[ -z "$STEP" ]]; then
     STEP=999999      # para "checkpoint-final"
 fi
 
-# Epoch aproximado: step / (n_train / batch_size_eff)
-# Derivamos el dataset de train del config YAML para cualquier experimento.
-EPOCH=$(python - <<EOF
+# Derivamos del config YAML: epoch aproximado, ruta del val y si es dominio math.
+# El bloque imprime tres líneas: EPOCH | VAL_DATASET | IS_MATH
+read -r EPOCH VAL_DATASET IS_MATH < <(python - <<EOF
 import glob, os, sys, yaml
 from datasets import load_from_disk
 
 configs = sorted(glob.glob(os.path.join("$PROJECT_DIR", "configs", "${EXP}_*.yaml")))
 if not configs:
-    print("0.0")
+    print("0.0  data/alpaca_val  0")
     sys.exit(0)
 with open(configs[0]) as f:
     cfg = yaml.safe_load(f)
-train_path = cfg["train_dataset"]   # ej: "data/alpaca_train"
+train_path = cfg["train_dataset"]
+val_path = cfg["eval_dataset"]
 ds = load_from_disk(os.path.join("$WORK_DIR", train_path))
 steps_per_epoch = max(1, len(ds) // 16)
-print(f"{$STEP / steps_per_epoch:.4f}")
+epoch = $STEP / steps_per_epoch
+is_math = 1 if "metamath" in train_path.lower() else 0
+print(f"{epoch:.4f} {val_path} {is_math}")
 EOF
 )
 
-echo "=== Eval HarmBench ==="
-echo "Exp:        $EXP"
-echo "Checkpoint: $CHECKPOINT"
-echo "Step:       $STEP   Epoch: $EPOCH"
-echo "Output:     $OUTPUT_PATH"
+BASE_MODEL="$WORK_DIR/models/Llama-3.2-3B-Instruct"
+CKPT_DIR="$(dirname "$OUTPUT_PATH")"
 
+echo "=== Eval checkpoint $CKPT_NAME ==="
+echo "Exp:    $EXP   Step: $STEP   Epoch: $EPOCH"
+echo "Val:    $VAL_DATASET   is_math=$IS_MATH"
+
+# --- 1) HarmBench (safety: ASR) ---
+echo "--- [1/3] HarmBench ---"
 python eval/run_harmbench.py \
-    --base_model "$WORK_DIR/models/Llama-3.2-3B-Instruct" \
+    --base_model "$BASE_MODEL" \
     --adapter_path "$CHECKPOINT" \
     --output_path "$OUTPUT_PATH" \
     --batch_size 16 \
@@ -83,4 +89,27 @@ python eval/run_harmbench.py \
     --step "$STEP" \
     --epoch "$EPOCH"
 
-echo "=== Eval done for $CKPT_NAME ==="
+# --- 2) XSTest (over-refusal) ---
+echo "--- [2/3] XSTest ---"
+python eval/run_xstest.py \
+    --base_model "$BASE_MODEL" \
+    --adapter_path "$CHECKPOINT" \
+    --output_path "$CKPT_DIR/xstest.json" \
+    --batch_size 16 \
+    --step "$STEP" \
+    --epoch "$EPOCH"
+
+# --- 3) Task eval (perplexity siempre; GSM8K solo si math) ---
+echo "--- [3/3] Task eval ---"
+GSM8K_FLAG=""
+[[ "$IS_MATH" == "1" ]] && GSM8K_FLAG="--gsm8k"
+python eval/run_task_eval.py \
+    --base_model "$BASE_MODEL" \
+    --adapter_path "$CHECKPOINT" \
+    --val_dataset "$WORK_DIR/$VAL_DATASET" \
+    --output_path "$CKPT_DIR/task_eval.json" \
+    --step "$STEP" \
+    --epoch "$EPOCH" \
+    $GSM8K_FLAG
+
+echo "=== Eval done for $CKPT_NAME (harmbench + xstest + task) ==="

@@ -13,9 +13,20 @@ Filtros aplicados (en orden):
   1. is_safe == True (filtro original de BeaverTails)
   2. La respuesta contiene al menos un patrón de rechazo limpio
   3. La respuesta no es demasiado corta (<20 chars) ni excesivamente larga
+
+Modo de respuesta (--response_mode):
+  - dataset (default): mantiene la respuesta real (variada) del dataset → Exp E
+  - single:            sustituye TODAS las respuestas por una única negativa
+                       (--single_text). Aísla "diversidad de respuesta = 0".
+  - pool:              sustituye cada respuesta por una paráfrasis aleatoria de
+                       un pool pequeño (--pool_file o el built-in de ~15).
+
+En los tres modos los PROMPTS son idénticos (mismo filtro), de modo que la
+única variable entre Exp E / single / pool es el contenido de la respuesta.
 """
 import argparse
 import logging
+import random
 import sys
 from pathlib import Path
 
@@ -24,6 +35,30 @@ from datasets import load_dataset
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = "You are a helpful assistant."
+
+# Negativa única por defecto para --response_mode single.
+DEFAULT_SINGLE_REFUSAL = "I'm sorry, but I can't help with that request."
+
+# Pool de paráfrasis para --response_mode pool. Todas contienen al menos un
+# patrón de REFUSAL_PATTERNS, de modo que el estilo es homogéneo con el chat
+# de Llama 3.2 y consistente con el filtro de rechazo.
+DEFAULT_REFUSAL_POOL = [
+    "I'm sorry, but I can't help with that.",
+    "I can't assist with that request.",
+    "I'm not able to help with this.",
+    "Sorry, but I won't be able to help with that.",
+    "I can't provide assistance with that.",
+    "Unfortunately, I'm unable to help with that request.",
+    "I'm sorry, but that's something I can't help with.",
+    "I cannot help you with that.",
+    "I'm not able to assist with that request.",
+    "Sorry, I can't help with that one.",
+    "I won't be able to help with this request.",
+    "I'm sorry, but I can't comply with that.",
+    "That's not something I can help with.",
+    "I'm unable to assist with that.",
+    "I can't help with that, but I'm happy to help with something else.",
+]
 
 # Patrones que indican un rechazo limpio. Comprobamos en lowercase.
 REFUSAL_PATTERNS = [
@@ -59,17 +94,39 @@ def is_clean_refusal(response: str) -> bool:
     return any(p in response_lower for p in REFUSAL_PATTERNS)
 
 
-def format_example(example: dict) -> dict:
-    text = (
-        "<|begin_of_text|>"
-        "<|start_header_id|>system<|end_header_id|>\n\n"
-        f"{SYSTEM_PROMPT}<|eot_id|>"
-        "<|start_header_id|>user<|end_header_id|>\n\n"
-        f"{example['prompt']}<|eot_id|>"
-        "<|start_header_id|>assistant<|end_header_id|>\n\n"
-        f"{example['response']}<|eot_id|>"
-    )
-    return {"text": text, "source": "beavertails_clean"}
+def build_formatter(response_mode: str, single_text: str, pool: list[str]):
+    """Devuelve una función .map() que formatea cada ejemplo según el modo.
+
+    En modo 'pool' la elección de paráfrasis es determinista por índice
+    (idx % len(pool)) tras un shuffle previo del dataset con seed fija, de modo
+    que el reparto es reproducible sin depender del orden de los workers.
+    """
+    source_tag = {
+        "dataset": "beavertails_clean",
+        "single": "beavertails_canned_single",
+        "pool": "beavertails_canned_pool",
+    }[response_mode]
+
+    def _format(example: dict, idx: int) -> dict:
+        if response_mode == "dataset":
+            response = example["response"]
+        elif response_mode == "single":
+            response = single_text
+        else:  # pool
+            response = pool[idx % len(pool)]
+
+        text = (
+            "<|begin_of_text|>"
+            "<|start_header_id|>system<|end_header_id|>\n\n"
+            f"{SYSTEM_PROMPT}<|eot_id|>"
+            "<|start_header_id|>user<|end_header_id|>\n\n"
+            f"{example['prompt']}<|eot_id|>"
+            "<|start_header_id|>assistant<|end_header_id|>\n\n"
+            f"{response}<|eot_id|>"
+        )
+        return {"text": text, "source": source_tag}
+
+    return _format
 
 
 def main() -> None:
@@ -81,7 +138,29 @@ def main() -> None:
     parser.add_argument("--split", default="30k_train")
     parser.add_argument("--max_samples", type=int, default=None)
     parser.add_argument("--num_proc", type=int, default=4)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--response_mode", default="dataset",
+                        choices=["dataset", "single", "pool"],
+                        help="dataset=respuesta real (Exp E); single=una sola negativa; "
+                             "pool=paráfrasis aleatoria de un pool")
+    parser.add_argument("--single_text", default=DEFAULT_SINGLE_REFUSAL,
+                        help="Texto de la negativa única (solo --response_mode single)")
+    parser.add_argument("--pool_file", default=None,
+                        help="Fichero con una paráfrasis por línea (solo --response_mode pool). "
+                             "Si se omite, usa el pool built-in.")
     args = parser.parse_args()
+
+    # Cargar pool si procede
+    pool = DEFAULT_REFUSAL_POOL
+    if args.response_mode == "pool" and args.pool_file:
+        pool = [ln.strip() for ln in Path(args.pool_file).read_text().splitlines() if ln.strip()]
+        if not pool:
+            logger.error(f"--pool_file {args.pool_file} está vacío")
+            sys.exit(1)
+    if args.response_mode == "single":
+        logger.info(f"response_mode=single | texto: {args.single_text!r}")
+    elif args.response_mode == "pool":
+        logger.info(f"response_mode=pool | {len(pool)} paráfrasis")
 
     logger.info(f"Downloading PKU-Alignment/BeaverTails (split={args.split})...")
     ds = load_dataset("PKU-Alignment/BeaverTails", split=args.split)
@@ -93,7 +172,7 @@ def main() -> None:
     n_after_safe = len(ds)
     logger.info(f"After is_safe filter: {n_after_safe} ({n_after_safe/raw_n*100:.1f}% of raw)")
 
-    # Step 2: keep only clean refusals
+    # Step 2: keep only clean refusals  (mismos PROMPTS en los tres modos)
     ds = ds.filter(lambda x: is_clean_refusal(x.get("response", "")),
                    desc="Filter clean refusals")
     n_after_refusal = len(ds)
@@ -103,11 +182,16 @@ def main() -> None:
         f"{n_after_refusal/max(1, n_after_safe)*100:.1f}% of is_safe)"
     )
 
+    # Shuffle determinista para que el reparto del pool sea reproducible
+    ds = ds.shuffle(seed=args.seed)
+
     if args.max_samples is not None:
         ds = ds.select(range(args.max_samples))
 
+    formatter = build_formatter(args.response_mode, args.single_text, pool)
     ds = ds.map(
-        format_example,
+        formatter,
+        with_indices=True,
         remove_columns=ds.column_names,
         num_proc=args.num_proc,
         desc="Formatting examples",

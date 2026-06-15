@@ -21,10 +21,17 @@ export PARTITION_GPU="gpuMax"         # H100 96GB
 export PARTITION_GPU_FALLBACK="gpu"   # L4 24GB
 export PARTITION_CPU="cpu"
 
+# Recurso L40S (48 GB) — 6 nodos (slurm-gpu03..08), usados en el factorial.
+# Comparten la partición 'gpu' con el L4 (gpu02); el GRES nvidia_l40s es lo que
+# discrimina: con --gres=gpu:nvidia_l40s:1 el job sólo cae en un L40S, no en el L4.
+export PARTITION_L40="gpu"                       # misma partición que el L4
+export GRES_L40="gpu:nvidia_l40s:1"             # confirmado (L40S, 48GB)
+
 # GRES (tipo de GPU). Sintaxis: gpu:<nombre>:<cantidad>
 # Comprobado con: sinfo -o "%N %G"
-#   slurm-gpu01 → gpu:nvidia_h100_nvl:1   (H100 96GB)
-#   slurm-gpu02 → gpu:nvidia_l4:1         (L4 24GB)
+#   slurm-gpu01      → gpu:nvidia_h100_nvl:1   (H100 96GB)
+#   slurm-gpu02      → gpu:nvidia_l4:1         (L4 24GB)
+#   slurm-gpu03..08  → gpu:nvidia_l40s:1       (L40S 48GB)
 export GRES_GPU="gpu:nvidia_h100_nvl:1"
 
 # Rutas persistentes (sobreviven entre jobs)
