@@ -98,7 +98,19 @@ CANNED_EXPERIMENTS=(
     exp_math_canned_pool
 )
 
-ALL_EXPERIMENTS=("${FACTORIAL_EXPERIMENTS[@]}" "${CANNED_EXPERIMENTS[@]}")
+# Ablación canned al 5% (mismos prompts; ver 01d_prepare_data_canned5.sh)
+CANNED5_EXPERIMENTS=(
+    exp_alpaca_canned5_single
+    exp_alpaca_canned5_pool
+    exp_math_canned5_single
+    exp_math_canned5_pool
+)
+
+ALL_EXPERIMENTS=(
+    "${FACTORIAL_EXPERIMENTS[@]}"
+    "${CANNED_EXPERIMENTS[@]}"
+    "${CANNED5_EXPERIMENTS[@]}"
+)
 
 # Si el usuario pasa argumentos, ejecuta solo esos
 if [[ $# -gt 0 ]]; then
