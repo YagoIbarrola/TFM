@@ -66,7 +66,8 @@ def main() -> None:
             "perplexity": None, "gsm8k_acc": None, "gsm8k_n": None,
             "xstest_refusal_safe": None, "xstest_refusal_unsafe": None,
             "xstest_n_safe": None, "xstest_n_unsafe": None,
-            "task_json": "", "xstest_json": "",
+            "bt_asr": None, "bt_asr_n": None,
+            "task_json": "", "xstest_json": "", "bt_asr_json": "",
         })
 
     # --- task_eval.json ---
@@ -105,6 +106,23 @@ def main() -> None:
         r["xstest_n_safe"] = agg.get("n_safe")
         r["xstest_n_unsafe"] = agg.get("n_unsafe")
         r["xstest_json"] = str(jp)
+        if r["epoch"] is None:
+            r["epoch"] = meta.get("epoch")
+
+    # --- bt_asr.json (held-out de BeaverTails) ---
+    for jp in sorted(exp_dir.rglob("bt_asr.json")):
+        data = _load(jp)
+        if data is None:
+            continue
+        meta = data.get("metadata", {})
+        agg = data.get("results", {}).get("aggregate", {})
+        step = meta.get("step") if meta.get("step") is not None else extract_step(jp)
+        if step is None:
+            continue
+        r = _row(step, meta.get("epoch"))
+        r["bt_asr"] = agg.get("asr")
+        r["bt_asr_n"] = agg.get("n_total")
+        r["bt_asr_json"] = str(jp)
         if r["epoch"] is None:
             r["epoch"] = meta.get("epoch")
 

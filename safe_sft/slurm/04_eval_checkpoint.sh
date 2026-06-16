@@ -55,7 +55,8 @@ read -r EPOCH VAL_DATASET IS_MATH < <(python - <<EOF
 import glob, os, sys, yaml
 from datasets import load_from_disk
 
-configs = sorted(glob.glob(os.path.join("$PROJECT_DIR", "configs", "${EXP}_*.yaml")))
+configs = sorted(glob.glob(os.path.join("$PROJECT_DIR", "configs", "${EXP}_*.yaml"))
+                 + glob.glob(os.path.join("$PROJECT_DIR", "configs", "${EXP}.yaml")))
 if not configs:
     print("0.0  data/alpaca_val  0")
     sys.exit(0)
@@ -112,4 +113,20 @@ python eval/run_task_eval.py \
     --epoch "$EPOCH" \
     $GSM8K_FLAG
 
-echo "=== Eval done for $CKPT_NAME (harmbench + xstest + task) ==="
+# --- 4) BT-ASR (held-out de BeaverTails), si existe el split ---
+HELDOUT="$WORK_DIR/data/beavertails_asr_heldout"
+if [[ -d "$HELDOUT" ]]; then
+    echo "--- [4] BeaverTails ASR (held-out) ---"
+    python eval/run_beavertails_asr.py \
+        --base_model "$BASE_MODEL" \
+        --adapter_path "$CHECKPOINT" \
+        --heldout_dataset "$HELDOUT" \
+        --output_path "$CKPT_DIR/bt_asr.json" \
+        --batch_size 32 \
+        --step "$STEP" \
+        --epoch "$EPOCH"
+else
+    echo "--- [4] BT-ASR omitido (no existe $HELDOUT) ---"
+fi
+
+echo "=== Eval done for $CKPT_NAME (harmbench + xstest + task + bt_asr) ==="

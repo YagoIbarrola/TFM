@@ -179,6 +179,28 @@ def main() -> None:
         out_dir / "05_gsm8k.png", ylim=(0, 1),
     )
 
+    # --- 6) Régimen dinámico: ratio (controlador) y ASR_bt por ronda ---
+    for dyn_csv in sorted(results_dir.glob("*/dynamic_log.csv")):
+        exp = dyn_csv.parent.name
+        df = pd.read_csv(dyn_csv)
+        fig, ax1 = plt.subplots(figsize=(9, 5.5))
+        ax1.plot(df["step"], df["ratio_used"], "o-", color="tab:blue", label="ratio safety")
+        ax1.set_xlabel("paso de entrenamiento")
+        ax1.set_ylabel("ratio de safety", color="tab:blue")
+        ax1.tick_params(axis="y", labelcolor="tab:blue")
+        ax2 = ax1.twinx()
+        ax2.plot(df["step"], df["asr_bt"], "s--", color="tab:red", label="ASR held-out BeaverTails")
+        ax2.axhspan(0.15, 0.25, color="gray", alpha=0.15)   # banda muerta
+        ax2.set_ylabel("ASR_bt", color="tab:red")
+        ax2.tick_params(axis="y", labelcolor="tab:red")
+        ax2.set_ylim(0, 1)
+        plt.title(f"Régimen dinámico ({label(exp)}): ratio vs ASR (banda muerta sombreada)")
+        fig.tight_layout()
+        out = out_dir / f"06_dynamic_{exp}.png"
+        plt.savefig(out, dpi=130)
+        plt.close()
+        print(f"  ✓ {out}")
+
     print(f"\nFiguras en {out_dir}/")
 
 

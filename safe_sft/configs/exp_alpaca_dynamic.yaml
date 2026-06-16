@@ -1,0 +1,62 @@
+# Régimen DINÁMICO — Alpaca, ratio de safety adaptativo por ASR (banda muerta)
+# El controlador ajusta el % de safety según el ASR en el held-out de BeaverTails.
+# Datos de safety: respuestas reales (beavertails_clean_train) → comparable con exp_e.
+#
+# train_dataset/eval_dataset (top-level) existen para que 04_eval_checkpoint.sh y
+# 05_aggregate.sh funcionen sin cambios (curvas HarmBench/XSTest/task por checkpoint).
+# El entrenamiento real usa la sección `dynamic`.
+
+experiment_name: exp_alpaca_dynamic
+
+train_dataset: data/alpaca_train          # solo para el cálculo de epoch en eval
+eval_dataset:  data/alpaca_val
+output_dir:    results/exp_alpaca_dynamic
+
+model_path: models/Llama-3.2-3B-Instruct
+
+peft:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: none
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  task_type: CAUSAL_LM
+
+training:
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4          # batch efectivo = 16
+  learning_rate: 2.0e-4
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  bf16: true
+  fp16: false
+  logging_steps: 50
+  seed: 42
+
+sft:
+  max_length: 1024
+
+dynamic:
+  base_dataset:   data/alpaca_train
+  safety_dataset: data/beavertails_clean_train     # respuestas reales, sin held-out
+  heldout_asr:    data/beavertails_asr_heldout     # sensor del controlador
+
+  total_steps: 9000                # ~3 épocas de Alpaca a batch_eff=16
+  round_steps: 500                 # reajuste cada 500 pasos (~18 rondas)
+
+  start_ratio: 0.10                # ratio inicial de safety
+  min_ratio:   0.0
+  max_ratio:   0.30
+  target_asr:  0.20                # objetivo (informativo)
+  deadband_low:  0.15              # ASR < 0.15 → baja safety
+  deadband_high: 0.25              # ASR > 0.25 → sube safety
+  delta: 0.05                      # paso de ajuste del ratio
+
+  asr_heldout_batch_size: 32
+  asr_max_new_tokens: 128
+
+wandb:
+  project: safe_sft_tfm
+  run_name: exp_alpaca_dynamic
+  tags: [alpaca, dynamic, beavertails_clean, llama32_3b, controller_deadband]
