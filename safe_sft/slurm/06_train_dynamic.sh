@@ -24,7 +24,12 @@ cd "$PROJECT_DIR"
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 EXP="${EXP:?Debes pasar EXP=exp_alpaca_dynamic}"
-CONFIG_FILE=$(ls configs/${EXP}_*.yaml configs/${EXP}.yaml 2>/dev/null | head -1)
+# Selección de config robusta a set -e/pipefail (ls falla con código 2 si algún
+# patrón glob no casa; aquí comprobamos fichero a fichero sin abortar).
+CONFIG_FILE=""
+for c in "configs/${EXP}.yaml" configs/${EXP}_*.yaml; do
+    [[ -f "$c" ]] && { CONFIG_FILE="$c"; break; }
+done
 if [[ -z "$CONFIG_FILE" ]]; then
     echo "ERROR: no hay config para $EXP" >&2; exit 1
 fi
