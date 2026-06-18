@@ -43,12 +43,17 @@ dynamic:
   round_steps: 500
 
   start_ratio: 0.10
-  min_ratio:   0.0
+  min_ratio:   0.01        # floor > 0 (necesario para adaptación multiplicativa)
   max_ratio:   0.30
   target_asr:  0.20
-  deadband_low:  0.15
-  deadband_high: 0.25
-  delta: 0.05
+
+  controller:
+    type: deadband
+    mode: multiplicative   # ASR>banda → ×up ; ASR<banda → ×down
+    deadband_low:  0.15
+    deadband_high: 0.25
+    up:   2.0
+    down: 0.5
 
   asr_heldout_batch_size: 32
   asr_max_new_tokens: 128

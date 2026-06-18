@@ -13,7 +13,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:nvidia_h100_nvl:1
-#SBATCH --time=10:00:00
+#SBATCH --time=24:00:00
 #SBATCH --output=logs/gen_selfalign_%j.out
 #SBATCH --error=logs/gen_selfalign_%j.err
 
@@ -24,7 +24,8 @@ cd "$PROJECT_DIR"
 
 D="$WORK_DIR/data"
 POOL="$D/beavertails_selfalign_train"
-MAX_PROMPTS="${MAX_PROMPTS:-1500}"
+# ~14k prompts × keep-rate 0.74 ≈ 10.3k ejemplos → suficiente para 15% sobre Alpaca (49k)
+MAX_PROMPTS="${MAX_PROMPTS:-14000}"
 N_CAND="${N_CAND:-4}"
 
 # 1) Generar el pool self-align (si no existe)

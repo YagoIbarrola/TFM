@@ -88,7 +88,7 @@ def main() -> None:
     ap.add_argument("--split", default="330k_train")
     ap.add_argument("--heldout_size", type=int, default=256)
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--max_prompts", type=int, default=1500)
+    ap.add_argument("--max_prompts", type=int, default=14000)
     ap.add_argument("--n_candidates", type=int, default=4)
     ap.add_argument("--temperature", type=float, default=0.8)
     ap.add_argument("--top_p", type=float, default=0.9)

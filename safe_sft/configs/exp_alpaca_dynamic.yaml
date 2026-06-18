@@ -46,12 +46,17 @@ dynamic:
   round_steps: 500                 # reajuste cada 500 pasos (~18 rondas)
 
   start_ratio: 0.10                # ratio inicial de safety
-  min_ratio:   0.0
+  min_ratio:   0.01               # floor > 0 (necesario para multiplicativo)
   max_ratio:   0.30
-  target_asr:  0.20                # objetivo (informativo)
-  deadband_low:  0.15              # ASR < 0.15 → baja safety
-  deadband_high: 0.25              # ASR > 0.25 → sube safety
-  delta: 0.05                      # paso de ajuste del ratio
+  target_asr:  0.20
+
+  controller:
+    type: deadband
+    mode: multiplicative          # ASR>banda → ×up ; ASR<banda → ×down
+    deadband_low:  0.15
+    deadband_high: 0.25
+    up:   2.0
+    down: 0.5
 
   asr_heldout_batch_size: 32
   asr_max_new_tokens: 128

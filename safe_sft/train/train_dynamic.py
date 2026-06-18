@@ -41,8 +41,10 @@ from peft import LoraConfig, get_peft_model
 from transformers import (AutoModelForCausalLM, AutoTokenizer,
                           get_cosine_schedule_with_warmup)
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))            # train/ (controllers)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "eval"))
 from run_beavertails_asr import compute_bt_asr  # noqa: E402
+from controllers import build_controller  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -123,11 +125,10 @@ def main() -> None:
                             lr=tr["learning_rate"], weight_decay=tr["weight_decay"])
     sched = get_cosine_schedule_with_warmup(opt, warmup, total_steps)
 
-    # --- Controlador (banda muerta) ---
-    ratio = float(dyn["start_ratio"])
-    rmin, rmax = float(dyn["min_ratio"]), float(dyn["max_ratio"])
-    db_low, db_high = float(dyn["deadband_low"]), float(dyn["deadband_high"])
-    delta = float(dyn["delta"])
+    # --- Controlador (enchufable: deadband / pid / bandit) ---
+    controller = build_controller(dyn)
+    ctype = (dyn.get("controller") or {}).get("type", "deadband")
+    logger.info(f"Controlador: {ctype}")
 
     rng = random.Random(tr["seed"])
     log_path = Path(output_dir) / "dynamic_log.csv"
@@ -137,12 +138,13 @@ def main() -> None:
     global_step = 0
     n_rounds = math.ceil(total_steps / round_steps)
     logger.info(f"Plan: {n_rounds} rondas × {round_steps} pasos (total {total_steps}); "
-                f"target ASR={dyn['target_asr']} banda=[{db_low},{db_high}] δ={delta}")
+                f"target ASR={dyn['target_asr']} controlador={ctype}")
 
     for r in range(n_rounds):
         steps_this = min(round_steps, total_steps - global_step)
         if steps_this <= 0:
             break
+        ratio = controller.propose()          # ratio para esta ronda
         n_examples = steps_this * micro_bs * accum
         texts, n_safety = build_round_texts(task_texts, safety_texts, ratio, n_examples, rng)
         eff_ratio = n_safety / max(1, n_examples)
@@ -188,24 +190,18 @@ def main() -> None:
                                  max_new_tokens=int(dyn.get("asr_max_new_tokens", 128)))
         asr = asr_res["asr"]
 
-        # ---- Controlador de banda muerta ----
-        ratio_used = ratio
-        if asr is not None and asr > db_high:
-            ratio = min(rmax, ratio + delta)
-            action = "sube"
-        elif asr is not None and asr < db_low:
-            ratio = max(rmin, ratio - delta)
-            action = "baja"
-        else:
-            action = "mantiene"
-        logger.info(f"[Ronda {r}] step={global_step} ASR_bt={asr} → {action} "
-                    f"(ratio {ratio_used:.3f} → {ratio:.3f})")
+        # ---- Controlador: actualiza estado y propone el ratio siguiente ----
+        info = controller.observe(asr)
+        logger.info(f"[Ronda {r}] step={global_step} ASR_bt={asr} → {info['action']} "
+                    f"(ratio usado {ratio:.3f} → próx {info['ratio_next']})")
 
         log_rows.append({
-            "round": r, "step": global_step, "ratio_used": round(ratio_used, 4),
+            "round": r, "step": global_step, "ratio_used": round(ratio, 4),
             "eff_ratio": round(eff_ratio, 4), "asr_bt": asr,
-            "refusal_rate": asr_res["refusal_rate"], "action": action,
-            "ratio_next": round(ratio, 4), "lr": sched.get_last_lr()[0],
+            "refusal_rate": asr_res["refusal_rate"], "action": info["action"],
+            "reward": info.get("reward", ""),
+            "ratio_next": round(float(info["ratio_next"]), 4),
+            "lr": sched.get_last_lr()[0],
         })
         with open(log_path, "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=list(log_rows[0].keys()))
