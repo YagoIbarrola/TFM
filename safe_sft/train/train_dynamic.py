@@ -125,10 +125,26 @@ def main() -> None:
                             lr=tr["learning_rate"], weight_decay=tr["weight_decay"])
     sched = get_cosine_schedule_with_warmup(opt, warmup, total_steps)
 
+    # --- Target = ASR del modelo ORIGINAL (auto-calibración) ---
+    # LoRA recién inicializado tiene ΔW=0 → el modelo aún se comporta como el base.
+    if dyn.get("target_from_baseline"):
+        logger.info("Midiendo ASR baseline (modelo sin entrenar) en el held-out...")
+        base_asr = compute_bt_asr(
+            model, tokenizer, heldout_prompts,
+            batch_size=int(dyn.get("asr_heldout_batch_size", 32)),
+            max_new_tokens=int(dyn.get("asr_max_new_tokens", 128)))["asr"]
+        dyn["target_asr"] = round(float(base_asr), 4)
+        bw = float(dyn.get("band_width", 0.10))
+        ctrl_cfg = dyn.setdefault("controller", {})
+        if ctrl_cfg.get("type", "deadband") == "deadband":
+            ctrl_cfg["deadband_low"] = round(max(0.0, dyn["target_asr"] - bw / 2), 4)
+            ctrl_cfg["deadband_high"] = round(dyn["target_asr"] + bw / 2, 4)
+        logger.info(f"target_asr = ASR del modelo original = {dyn['target_asr']}")
+
     # --- Controlador (enchufable: deadband / pid / bandit) ---
     controller = build_controller(dyn)
     ctype = (dyn.get("controller") or {}).get("type", "deadband")
-    logger.info(f"Controlador: {ctype}")
+    logger.info(f"Controlador: {ctype} | target_asr={dyn['target_asr']}")
 
     rng = random.Random(tr["seed"])
     log_path = Path(output_dir) / "dynamic_log.csv"

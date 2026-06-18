@@ -32,7 +32,8 @@ LABELS = {
     "exp_dynamic_canned_pool": "Dinámico deadband (canned-pool)",
     "exp_dynamic_pid": "Dinámico PID (canned-single)",
     "exp_dynamic_bandit": "Dinámico bandit (canned-single)",
-    "exp_dynamic_selfalign": "Dinámico deadband (self-align)",
+    "exp_dynamic_selfalign": "Dinámico (self-align)",
+    "exp_alpaca_selfalign": "Alpaca 15% self-align",
     "exp_c": "Math 0%",
     "exp_math_p5": "Math 5% (real)",
     "exp_math_p15": "Math 15% (real)",
@@ -285,9 +286,11 @@ def main() -> None:
               "Dinámico vs estático: perplexity", "perplexity ↓",
               out_dir / "11_cmp_perplexity.png")
 
-    # --- 12) Trade-off final: ASR vs over-refusal (un punto por experimento) ---
+    # --- 12) Trade-off final: ASR vs over-refusal (todos los Alpaca con ambas métricas) ---
+    scatter_exps = sorted({p.parent.name for p in results_dir.glob("*/task_curve.csv")
+                           if "math" not in p.parent.name})
     pts = []
-    for exp in single_task + pool_task:
+    for exp in scatter_exps:
         sec = load_curve(results_dir, exp, "security_curve.csv")
         task = load_curve(results_dir, exp, "task_curve.csv")
         if sec is None or task is None or "xstest_refusal_safe" not in task.columns:
@@ -315,6 +318,17 @@ def main() -> None:
         plt.xlim(0, 1); plt.ylim(0, 1); plt.grid(alpha=0.3)
         plt.tight_layout(); plt.savefig(out_dir / "12_tradeoff_final.png", dpi=130); plt.close()
         print(f"  ✓ {out_dir / '12_tradeoff_final.png'}")
+
+    # --- 13) Headline: self-align vs canned vs referencias ---
+    headline = ["exp_a", "exp_e", "exp_alpaca_canned_single", "exp_dynamic_canned_single",
+                "exp_alpaca_selfalign", "exp_dynamic_selfalign"]
+    line_plot(results_dir, headline, "security_curve.csv", "asr_standard",
+              "Comparativa ASR HarmBench: self-align vs canned vs referencias",
+              "ASR standard ↓", out_dir / "13a_headline_asr.png",
+              ylim=(0, 1), baseline_val=base_asr)
+    line_plot(results_dir, headline, "task_curve.csv", "xstest_refusal_safe",
+              "Comparativa over-refusal: self-align vs canned",
+              "over-refusal (safe) ↓", out_dir / "13b_headline_overrefusal.png", ylim=(0, 1))
 
     print(f"\nFiguras en {out_dir}/")
 

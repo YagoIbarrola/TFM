@@ -40,8 +40,12 @@ if [[ -z "$CHECKPOINT" ]]; then
 fi
 
 CKPT_NAME=$(basename "$CHECKPOINT")
-OUTPUT_PATH="$WORK_DIR/results/$EXP/$CKPT_NAME/harmbench.json"
-mkdir -p "$(dirname "$OUTPUT_PATH")"
+# Los JSON de eval (con prompts + completions) van a un subdir 'evals/' SEPARADO
+# del checkpoint, para que sobrevivan al borrado de adapters y se pueda re-juzgar
+# luego con un juez LLM sin reentrenar.
+EVAL_DIR="$WORK_DIR/results/$EXP/evals/$CKPT_NAME"
+mkdir -p "$EVAL_DIR"
+OUTPUT_PATH="$EVAL_DIR/harmbench.json"
 
 # Extraer step desde el nombre (checkpoint-1500 → 1500)
 STEP=$(echo "$CKPT_NAME" | grep -oP '\d+' || echo "")
@@ -73,7 +77,7 @@ EOF
 )
 
 BASE_MODEL="$WORK_DIR/models/Llama-3.2-3B-Instruct"
-CKPT_DIR="$(dirname "$OUTPUT_PATH")"
+CKPT_DIR="$EVAL_DIR"   # xstest.json / task_eval.json / bt_asr.json van aquí también
 
 echo "=== Eval checkpoint $CKPT_NAME ==="
 echo "Exp:    $EXP   Step: $STEP   Epoch: $EPOCH"
