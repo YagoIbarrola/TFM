@@ -26,8 +26,10 @@ LABELS = {
     "exp_alpaca_p5": "Alpaca 5% (real)",
     "exp_alpaca_canned_single": "Alpaca 15% canned-single",
     "exp_alpaca_canned_pool": "Alpaca 15% canned-pool",
-    "exp_alpaca_canned_single_p5": "Alpaca 5% canned-single",
-    "exp_alpaca_canned_pool_p5": "Alpaca 5% canned-pool",
+    "exp_alpaca_canned5_single": "Alpaca 5% canned-single",
+    "exp_alpaca_canned5_pool": "Alpaca 5% canned-pool",
+    "exp_dynamic_canned_single": "Alpaca dinámico canned-single",
+    "exp_dynamic_canned_pool": "Alpaca dinámico canned-pool",
     "exp_c": "Math 0%",
     "exp_math_p5": "Math 5% (real)",
     "exp_math_p15": "Math 15% (real)",
@@ -179,27 +181,137 @@ def main() -> None:
         out_dir / "05_gsm8k.png", ylim=(0, 1),
     )
 
-    # --- 6) Régimen dinámico: ratio (controlador) y ASR_bt por ronda ---
+    # --- 6/7) Régimen dinámico: paneles temporales ---
+    dyn_data = {}
     for dyn_csv in sorted(results_dir.glob("*/dynamic_log.csv")):
         exp = dyn_csv.parent.name
-        df = pd.read_csv(dyn_csv)
+        dlog = pd.read_csv(dyn_csv)
+        sec = load_curve(results_dir, exp, "security_curve.csv")
+        task = load_curve(results_dir, exp, "task_curve.csv")
+        dyn_data[exp] = (dlog, sec, task)
+
+        # 06: controlador (ratio vs ASR_bt)
         fig, ax1 = plt.subplots(figsize=(9, 5.5))
-        ax1.plot(df["step"], df["ratio_used"], "o-", color="tab:blue", label="ratio safety")
+        ax1.plot(dlog["step"], dlog["ratio_used"], "o-", color="tab:blue",
+                 drawstyle="steps-post", label="ratio safety")
         ax1.set_xlabel("paso de entrenamiento")
         ax1.set_ylabel("ratio de safety", color="tab:blue")
-        ax1.tick_params(axis="y", labelcolor="tab:blue")
+        ax1.tick_params(axis="y", labelcolor="tab:blue"); ax1.set_ylim(-0.02, 0.32)
         ax2 = ax1.twinx()
-        ax2.plot(df["step"], df["asr_bt"], "s--", color="tab:red", label="ASR held-out BeaverTails")
-        ax2.axhspan(0.15, 0.25, color="gray", alpha=0.15)   # banda muerta
+        ax2.plot(dlog["step"], dlog["asr_bt"], "s--", color="tab:red", label="ASR held-out BT")
+        ax2.axhspan(0.15, 0.25, color="gray", alpha=0.15)
         ax2.set_ylabel("ASR_bt", color="tab:red")
-        ax2.tick_params(axis="y", labelcolor="tab:red")
-        ax2.set_ylim(0, 1)
-        plt.title(f"Régimen dinámico ({label(exp)}): ratio vs ASR (banda muerta sombreada)")
-        fig.tight_layout()
-        out = out_dir / f"06_dynamic_{exp}.png"
-        plt.savefig(out, dpi=130)
-        plt.close()
-        print(f"  ✓ {out}")
+        ax2.tick_params(axis="y", labelcolor="tab:red"); ax2.set_ylim(0, 1)
+        plt.title(f"Controlador ({label(exp)}): ratio vs ASR_bt (banda muerta sombreada)")
+        fig.tight_layout(); plt.savefig(out_dir / f"06_dynamic_{exp}.png", dpi=130); plt.close()
+        print(f"  ✓ {out_dir / f'06_dynamic_{exp}.png'}")
+
+        # 07: panel temporal completo (2 filas)
+        fig, (axA, axB) = plt.subplots(2, 1, figsize=(10, 8.5), sharex=True)
+        axA.plot(dlog["step"], dlog["ratio_used"], drawstyle="steps-post",
+                 color="tab:blue", lw=2, label="ratio safety (controlador)")
+        axA.set_ylabel("ratio safety", color="tab:blue")
+        axA.tick_params(axis="y", labelcolor="tab:blue"); axA.set_ylim(-0.02, 0.32)
+        axAr = axA.twinx()
+        axAr.plot(dlog["step"], dlog["asr_bt"], "s-", color="tab:red", ms=4,
+                  label="ASR held-out BT (sensor)")
+        if sec is not None:
+            axAr.plot(sec["step"], sec["asr_standard"], "^--", color="darkorange", ms=4,
+                      label="ASR HarmBench std")
+        axAr.axhspan(0.15, 0.25, color="gray", alpha=0.15)
+        axAr.set_ylabel("ASR"); axAr.set_ylim(0, 1)
+        ls = axA.get_lines() + axAr.get_lines()
+        axA.legend(ls, [l.get_label() for l in ls], fontsize=8, loc="upper right")
+        axA.set_title(f"Régimen dinámico ({label(exp)}) — controlador y safety")
+        if task is not None:
+            axB.plot(task["step"], task["xstest_refusal_safe"], "o-", color="tab:purple",
+                     label="over-refusal XSTest (safe)")
+            axB.set_ylabel("over-refusal (safe)", color="tab:purple")
+            axB.tick_params(axis="y", labelcolor="tab:purple"); axB.set_ylim(0, 1)
+            axBr = axB.twinx()
+            axBr.plot(task["step"], task["perplexity"], "d--", color="tab:green", label="perplexity")
+            axBr.set_ylabel("perplexity", color="tab:green")
+            axBr.tick_params(axis="y", labelcolor="tab:green")
+            ls = axB.get_lines() + axBr.get_lines()
+            axB.legend(ls, [l.get_label() for l in ls], fontsize=8, loc="upper right")
+        axB.set_xlabel("paso de entrenamiento")
+        fig.tight_layout(); plt.savefig(out_dir / f"07_dynamic_panel_{exp}.png", dpi=130); plt.close()
+        print(f"  ✓ {out_dir / f'07_dynamic_panel_{exp}.png'}")
+
+    # 08: comparación entre runs dinámicos (single vs pool)
+    if len(dyn_data) >= 2:
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+        for exp, (dlog, sec, task) in dyn_data.items():
+            ax1.plot(dlog["step"], dlog["asr_bt"], "o-", ms=4, label=label(exp))
+            ax2.plot(dlog["step"], dlog["ratio_used"], drawstyle="steps-post", lw=2, label=label(exp))
+        ax1.axhspan(0.15, 0.25, color="gray", alpha=0.15)
+        ax1.set_ylabel("ASR held-out BT"); ax1.set_ylim(0, 1); ax1.legend(fontsize=8)
+        ax1.set_title("Régimen dinámico: ASR_bt y ratio por paso")
+        ax2.set_ylabel("ratio safety"); ax2.set_ylim(-0.02, 0.32)
+        ax2.set_xlabel("paso de entrenamiento"); ax2.legend(fontsize=8)
+        fig.tight_layout(); plt.savefig(out_dir / "08_dynamic_compare.png", dpi=130); plt.close()
+        print(f"  ✓ {out_dir / '08_dynamic_compare.png'}")
+
+    # --- 9/10/11) Dinámico vs estático (atributos comparables) ---
+    single_asr = ["exp_a", "exp_e", "exp_alpaca_canned5_single",
+                  "exp_alpaca_canned_single", "exp_dynamic_canned_single"]
+    pool_asr = ["exp_a", "exp_e", "exp_alpaca_canned5_pool",
+                "exp_alpaca_canned_pool", "exp_dynamic_canned_pool"]
+    single_task = ["exp_alpaca_canned5_single", "exp_alpaca_canned_single",
+                   "exp_dynamic_canned_single"]
+    pool_task = ["exp_alpaca_canned5_pool", "exp_alpaca_canned_pool",
+                 "exp_dynamic_canned_pool"]
+
+    line_plot(results_dir, single_asr, "security_curve.csv", "asr_standard",
+              "Dinámico vs estático (single): ASR HarmBench",
+              "ASR standard ↓", out_dir / "09a_cmp_single_asr.png",
+              ylim=(0, 1), baseline_val=base_asr)
+    line_plot(results_dir, pool_asr, "security_curve.csv", "asr_standard",
+              "Dinámico vs estático (pool): ASR HarmBench",
+              "ASR standard ↓", out_dir / "09b_cmp_pool_asr.png",
+              ylim=(0, 1), baseline_val=base_asr)
+
+    line_plot(results_dir, single_task, "task_curve.csv", "xstest_refusal_safe",
+              "Dinámico vs estático (single): over-refusal XSTest",
+              "over-refusal (safe) ↓", out_dir / "10a_cmp_single_overrefusal.png", ylim=(0, 1))
+    line_plot(results_dir, pool_task, "task_curve.csv", "xstest_refusal_safe",
+              "Dinámico vs estático (pool): over-refusal XSTest",
+              "over-refusal (safe) ↓", out_dir / "10b_cmp_pool_overrefusal.png", ylim=(0, 1))
+
+    line_plot(results_dir, single_task + pool_task, "task_curve.csv", "perplexity",
+              "Dinámico vs estático: perplexity", "perplexity ↓",
+              out_dir / "11_cmp_perplexity.png")
+
+    # --- 12) Trade-off final: ASR vs over-refusal (un punto por experimento) ---
+    pts = []
+    for exp in single_task + pool_task:
+        sec = load_curve(results_dir, exp, "security_curve.csv")
+        task = load_curve(results_dir, exp, "task_curve.csv")
+        if sec is None or task is None or "xstest_refusal_safe" not in task.columns:
+            continue
+        s = sec.dropna(subset=["asr_standard"])
+        t = task.dropna(subset=["xstest_refusal_safe"])
+        if s.empty or t.empty:
+            continue
+        pts.append((exp, t.iloc[-1]["xstest_refusal_safe"], s.iloc[-1]["asr_standard"]))
+    if pts:
+        plt.figure(figsize=(8.5, 6.5))
+        for exp, orr, asr in pts:
+            is_dyn = "dynamic" in exp
+            plt.scatter(orr, asr, s=140 if is_dyn else 90,
+                        marker="*" if is_dyn else "o",
+                        zorder=3, edgecolor="black", linewidth=0.6)
+            plt.annotate(label(exp), (orr, asr), fontsize=8,
+                         xytext=(6, 4), textcoords="offset points")
+        if base_asr is not None:
+            plt.axhline(base_asr, ls="--", c="gray", lw=1, label=f"ASR baseline ({base_asr:.2f})")
+            plt.legend(fontsize=8)
+        plt.xlabel("over-refusal en prompts seguros (XSTest) ↓")
+        plt.ylabel("ASR standard (HarmBench) ↓")
+        plt.title("Trade-off final: seguridad vs over-refusal\n(★ dinámico, ● estático; esquina inf-izq = ideal)")
+        plt.xlim(0, 1); plt.ylim(0, 1); plt.grid(alpha=0.3)
+        plt.tight_layout(); plt.savefig(out_dir / "12_tradeoff_final.png", dpi=130); plt.close()
+        print(f"  ✓ {out_dir / '12_tradeoff_final.png'}")
 
     print(f"\nFiguras en {out_dir}/")
 

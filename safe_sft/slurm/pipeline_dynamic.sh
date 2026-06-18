@@ -42,7 +42,7 @@ EVAL=$(sbatch --parsable --job-name="eval_${EXP}" \
     --dependency=afterok:"$TRAIN" --array=0-$((ARRAY_SIZE - 1)) \
     slurm/04_eval_checkpoint.sh)
 AGG=$(sbatch --parsable --job-name="agg_${EXP}" \
-    --partition="$PARTITION_CPU" --dependency=afterany:"$EVAL" \
+    --partition="${AGG_PARTITION:-$PARTITION_CPU}" --dependency=afterany:"$EVAL" \
     slurm/05_aggregate.sh)
 
 echo "train=$TRAIN  eval=$EVAL  agg=$AGG"

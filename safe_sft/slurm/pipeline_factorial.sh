@@ -153,7 +153,7 @@ for EXP in "${EXPERIMENTS[@]}"; do
     # -----------------------------------------------------------------------
     AGG_JOB=$(sbatch --parsable \
         --job-name="agg_${EXP}" \
-        --partition="$PARTITION_CPU" \
+        --partition="${AGG_PARTITION:-$PARTITION_CPU}" \
         --dependency=afterany:"$EVAL_JOB" \
         slurm/05_aggregate.sh)
 
