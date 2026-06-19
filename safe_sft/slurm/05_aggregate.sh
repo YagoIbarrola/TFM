@@ -46,3 +46,14 @@ mkdir -p "$PROJECT_DIR/results/$EXP"
 cp "$SEC_CSV" "$PROJECT_DIR/results/$EXP/security_curve.csv"
 [[ -f "$TASK_CSV" ]] && cp "$TASK_CSV" "$PROJECT_DIR/results/$EXP/task_curve.csv"
 echo "Backups en: $PROJECT_DIR/results/$EXP/"
+
+# Limpieza automática de adapters intermedios: las curvas (CSV) y los prompts+
+# respuestas (evals/) ya están guardados, así que los checkpoint-NNNN ya no hacen
+# falta. Conserva checkpoint-final. KEEP_CHECKPOINTS=1 para desactivar.
+if [[ "${KEEP_CHECKPOINTS:-0}" != "1" && -f "$SEC_CSV" ]]; then
+    n=$(ls -d "$EXP_DIR"/checkpoint-[0-9]* 2>/dev/null | wc -l)
+    if (( n > 0 )); then
+        rm -rf "$EXP_DIR"/checkpoint-[0-9]*
+        echo "Liberados $n adapters intermedios de $EXP (evals/ y CSV conservados)."
+    fi
+fi

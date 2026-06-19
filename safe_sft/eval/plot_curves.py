@@ -32,8 +32,16 @@ LABELS = {
     "exp_dynamic_canned_pool": "Dinámico deadband (canned-pool)",
     "exp_dynamic_pid": "Dinámico PID (canned-single)",
     "exp_dynamic_bandit": "Dinámico bandit (canned-single)",
-    "exp_dynamic_selfalign": "Dinámico (self-align)",
+    "exp_dynamic_selfalign": "Dinámico deadband (self-align)",
     "exp_alpaca_selfalign": "Alpaca 15% self-align",
+    "exp_alpaca_sa5": "Alpaca 5% self-align",
+    "exp_dynamic_sa_pid": "Dinámico PID (self-align)",
+    "exp_dynamic_sa_bandit": "Dinámico bandit (self-align)",
+    "exp_math_sa5": "Math 5% self-align",
+    "exp_math_sa15": "Math 15% self-align",
+    "exp_dynamic_sa_math_deadband": "Math dinámico deadband (self-align)",
+    "exp_dynamic_sa_math_pid": "Math dinámico PID (self-align)",
+    "exp_dynamic_sa_math_bandit": "Math dinámico bandit (self-align)",
     "exp_c": "Math 0%",
     "exp_math_p5": "Math 5% (real)",
     "exp_math_p15": "Math 15% (real)",
@@ -51,11 +59,20 @@ def label(exp: str) -> str:
     return LABELS.get(exp, exp)
 
 
-def load_curve(results_dir: Path, exp: str, fname: str) -> pd.DataFrame | None:
-    path = results_dir / exp / fname
-    if not path.is_file():
+def _read_csv(path: Path) -> pd.DataFrame | None:
+    """Lee un CSV; devuelve None si no existe, está vacío o no parsea."""
+    if not path.is_file() or path.stat().st_size == 0:
         return None
-    df = pd.read_csv(path)
+    try:
+        return pd.read_csv(path)
+    except pd.errors.EmptyDataError:
+        return None
+
+
+def load_curve(results_dir: Path, exp: str, fname: str) -> pd.DataFrame | None:
+    df = _read_csv(results_dir / exp / fname)
+    if df is None:
+        return None
     df = df[df["step"] != FINAL_STEP].copy()      # quita el duplicado 'final'
     df = df.sort_values("step")
     return df
@@ -189,7 +206,9 @@ def main() -> None:
     dyn_data = {}
     for dyn_csv in sorted(results_dir.glob("*/dynamic_log.csv")):
         exp = dyn_csv.parent.name
-        dlog = pd.read_csv(dyn_csv)
+        dlog = _read_csv(dyn_csv)
+        if dlog is None or dlog.empty:
+            continue
         sec = load_curve(results_dir, exp, "security_curve.csv")
         task = load_curve(results_dir, exp, "task_curve.csv")
         dyn_data[exp] = (dlog, sec, task)
@@ -329,6 +348,33 @@ def main() -> None:
     line_plot(results_dir, headline, "task_curve.csv", "xstest_refusal_safe",
               "Comparativa over-refusal: self-align vs canned",
               "over-refusal (safe) ↓", out_dir / "13b_headline_overrefusal.png", ylim=(0, 1))
+
+    # --- 14) Self-align dosis-respuesta (Alpaca 0% / 5% / 15%) ---
+    dose = ["exp_a", "exp_alpaca_sa5", "exp_alpaca_selfalign"]
+    line_plot(results_dir, dose, "security_curve.csv", "asr_standard",
+              "Self-align dosis-respuesta (Alpaca): ASR HarmBench",
+              "ASR standard ↓", out_dir / "14a_selfalign_dose_asr.png",
+              ylim=(0, 1), baseline_val=base_asr)
+    line_plot(results_dir, dose, "task_curve.csv", "xstest_refusal_safe",
+              "Self-align dosis-respuesta (Alpaca): over-refusal",
+              "over-refusal (safe) ↓", out_dir / "14b_selfalign_dose_overrefusal.png", ylim=(0, 1))
+
+    # --- 15) Controladores sobre self-align (deadband / PID / bandit) ---
+    sa_ctrl = [e for e in ["exp_dynamic_selfalign", "exp_dynamic_sa_pid", "exp_dynamic_sa_bandit"]
+               if _read_csv(results_dir / e / "dynamic_log.csv") is not None]
+    if len(sa_ctrl) >= 2:
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+        for e in sa_ctrl:
+            dl = _read_csv(results_dir / e / "dynamic_log.csv")
+            ax1.plot(dl["step"], dl["asr_bt"], "o-", ms=4, label=label(e))
+            ax2.plot(dl["step"], dl["ratio_used"], drawstyle="steps-post", lw=2, label=label(e))
+        ax1.axhspan(0.0, 0.0, color="gray", alpha=0)  # placeholder (target auto por run)
+        ax1.set_ylabel("ASR held-out BT"); ax1.set_ylim(0, 1); ax1.legend(fontsize=8)
+        ax1.set_title("Controladores sobre self-align: ASR_bt y ratio por paso")
+        ax2.set_ylabel("ratio safety"); ax2.set_ylim(-0.02, 0.32)
+        ax2.set_xlabel("paso de entrenamiento"); ax2.legend(fontsize=8)
+        fig.tight_layout(); plt.savefig(out_dir / "15_controllers_selfalign.png", dpi=130); plt.close()
+        print(f"  ✓ {out_dir / '15_controllers_selfalign.png'}")
 
     print(f"\nFiguras en {out_dir}/")
 
