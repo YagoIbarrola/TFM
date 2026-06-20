@@ -51,6 +51,18 @@ class DeadbandController:
         return {"action": action, "reward": "", "ratio_next": self.ratio}
 
 
+class FixedController:
+    """Ratio constante (control: dinámico a ratio fijo, para comparar con el estático)."""
+    def __init__(self, ratio):
+        self.ratio = ratio
+
+    def propose(self):
+        return self.ratio
+
+    def observe(self, asr):
+        return {"action": "fijo", "reward": "", "ratio_next": self.ratio}
+
+
 class PIDController:
     def __init__(self, start, rmin, rmax, target, kp, ki, kd, i_clamp=1.0):
         self.ratio = start; self.rmin = rmin; self.rmax = rmax; self.target = target
@@ -124,6 +136,8 @@ def build_controller(dyn: dict):
     start = float(dyn["start_ratio"]); rmin = float(dyn["min_ratio"]); rmax = float(dyn["max_ratio"])
     target = float(dyn["target_asr"])
 
+    if ctype == "fixed":
+        return FixedController(float(c.get("ratio", start)))
     if ctype == "deadband":
         low = float(c.get("deadband_low", dyn.get("deadband_low", 0.15)))
         high = float(c.get("deadband_high", dyn.get("deadband_high", 0.25)))

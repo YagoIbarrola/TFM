@@ -60,19 +60,34 @@ def set_seed(s: int) -> None:
         torch.cuda.manual_seed_all(s)
 
 
-def build_round_texts(task_texts, safety_texts, ratio, n_examples, rng):
-    """Muestra n_examples al ratio dado (con reemplazo si el pool es pequeño)."""
+class ShuffledCycler:
+    """Itera SIN reemplazo, re-barajando al agotar el pool (cobertura tipo época,
+    igual que las épocas de SFTTrainer)."""
+    def __init__(self, items, rng):
+        self.items = list(items)
+        self.rng = rng
+        self.order = []
+        self.idx = 0
+
+    def draw(self, k):
+        out = []
+        while k > 0:
+            if self.idx >= len(self.order):
+                self.order = self.items[:]
+                self.rng.shuffle(self.order)
+                self.idx = 0
+            take = min(k, len(self.order) - self.idx)
+            out += self.order[self.idx:self.idx + take]
+            self.idx += take
+            k -= take
+        return out
+
+
+def build_round_texts(task_cycler, safety_cycler, ratio, n_examples, rng):
+    """Muestra n_examples al ratio dado, SIN reemplazo (cycler tipo época)."""
     n_safety = int(round(ratio * n_examples))
     n_task = n_examples - n_safety
-
-    def sample(pool, k):
-        if k <= 0:
-            return []
-        if k <= len(pool):
-            return rng.sample(pool, k)
-        return [pool[rng.randrange(len(pool))] for _ in range(k)]  # con reemplazo
-
-    batch = sample(task_texts, n_task) + sample(safety_texts, n_safety)
+    batch = task_cycler.draw(n_task) + safety_cycler.draw(n_safety)
     rng.shuffle(batch)
     return batch, n_safety
 
@@ -147,6 +162,8 @@ def main() -> None:
     logger.info(f"Controlador: {ctype} | target_asr={dyn['target_asr']}")
 
     rng = random.Random(tr["seed"])
+    task_cycler = ShuffledCycler(task_texts, rng)
+    safety_cycler = ShuffledCycler(safety_texts, rng)
     log_path = Path(output_dir) / "dynamic_log.csv"
     log_rows = []
     list_path = Path(output_dir) / "checkpoint_list.txt"
@@ -162,7 +179,7 @@ def main() -> None:
             break
         ratio = controller.propose()          # ratio para esta ronda
         n_examples = steps_this * micro_bs * accum
-        texts, n_safety = build_round_texts(task_texts, safety_texts, ratio, n_examples, rng)
+        texts, n_safety = build_round_texts(task_cycler, safety_cycler, ratio, n_examples, rng)
         eff_ratio = n_safety / max(1, n_examples)
         logger.info(f"[Ronda {r}] ratio={ratio:.3f} (eff={eff_ratio:.3f}) "
                     f"{n_examples} ejemplos, {steps_this} pasos")

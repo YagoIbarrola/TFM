@@ -376,6 +376,67 @@ def main() -> None:
         fig.tight_layout(); plt.savefig(out_dir / "15_controllers_selfalign.png", dpi=130); plt.close()
         print(f"  ✓ {out_dir / '15_controllers_selfalign.png'}")
 
+    # --- 16/17) Rejilla por dominio (factorial self-align) ---
+    COND_COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
+
+    def factorial_grid(domain_name, conds, with_gsm8k, outfile):
+        metrics = [
+            ("security_curve.csv", "asr_standard", "ASR HarmBench ↓", (0, 1), base_asr),
+            ("task_curve.csv", "bt_asr", "ASR BeaverTails held-out ↓", (0, 1), None),
+            ("task_curve.csv", "xstest_refusal_safe", "over-refusal XSTest ↓", (0, 1), None),
+            ("task_curve.csv", "perplexity", "perplexity ↓", None, None),
+        ]
+        if with_gsm8k:
+            metrics.append(("task_curve.csv", "gsm8k_acc", "GSM8K accuracy ↑", (0, 1), None))
+        nrows = (len(metrics) + 1) // 2
+        fig, axes = plt.subplots(nrows, 2, figsize=(13, 4.2 * nrows))
+        axes = axes.flatten()
+        legend_hl = None
+        for ax, (csv, col, ylab, ylim, base) in zip(axes, metrics):
+            drew = False
+            for (exp, lbl), color in zip(conds, COND_COLORS):
+                df = load_curve(results_dir, exp, csv)
+                if df is None or col not in df.columns:
+                    continue
+                s = df.dropna(subset=[col])
+                if s.empty:
+                    continue
+                ax.plot(s["step"], s[col], "o-", ms=3, lw=1.5, color=color, label=lbl)
+                drew = True
+            if base is not None:
+                ax.axhline(base, ls="--", c="gray", lw=1, label=f"baseline ({base:.2f})")
+            ax.set_title(ylab); ax.set_xlabel("paso"); ax.grid(alpha=0.3)
+            if ylim:
+                ax.set_ylim(*ylim)
+            if drew and legend_hl is None:
+                legend_hl = ax.get_legend_handles_labels()
+        for ax in axes[len(metrics):]:
+            ax.axis("off")
+        if legend_hl:
+            fig.legend(*legend_hl, loc="lower center", ncol=4, fontsize=9)
+        fig.suptitle(f"Factorial self-align — {domain_name}", fontsize=13)
+        fig.tight_layout(rect=[0, 0.06, 1, 0.97])
+        fig.savefig(out_dir / outfile, dpi=130); plt.close(fig)
+        print(f"  ✓ {out_dir / outfile}")
+
+    factorial_grid("Alpaca", [
+        ("exp_a", "0%"), ("exp_alpaca_sa5", "5%"), ("exp_alpaca_selfalign", "15%"),
+        ("exp_dynamic_selfalign", "din. deadband"), ("exp_dynamic_sa_pid", "din. PID"),
+        ("exp_dynamic_sa_bandit", "din. bandit"),
+    ], False, "16_alpaca_selfalign_grid.png")
+
+    factorial_grid("MetaMath", [
+        ("exp_c", "0%"), ("exp_math_sa5", "5%"), ("exp_math_sa15", "15%"),
+        ("exp_dynamic_sa_math_deadband", "din. deadband"), ("exp_dynamic_sa_math_pid", "din. PID"),
+        ("exp_dynamic_sa_math_bandit", "din. bandit"),
+    ], True, "17_math_selfalign_grid.png")
+
+    # --- 18) CONTROL: estático 15% vs dinámico-fijo 15% (igualdad de condiciones) ---
+    factorial_grid("Control — estático 15% vs dinámico-fijo 15%", [
+        ("exp_alpaca_selfalign", "estático 15%"),
+        ("exp_dynamic_sa_fixed15", "dinámico fijo 15%"),
+    ], False, "18_control_static_vs_fixeddyn.png")
+
     print(f"\nFiguras en {out_dir}/")
 
 
