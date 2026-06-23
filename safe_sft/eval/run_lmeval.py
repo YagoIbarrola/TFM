@@ -58,8 +58,10 @@ def run_lmeval(tasks: list[str], base_model: str, adapter: Optional[str],
     model_args = f"pretrained={base_model},dtype=bfloat16,trust_remote_code=True"
     if adapter:
         model_args += f",peft={adapter}"
+    # lm-eval espera int o "auto"; una cadena numérica puede fallar
+    bs = int(batch_size) if str(batch_size).isdigit() else batch_size
     kwargs = dict(model="hf", model_args=model_args, tasks=tasks,
-                  batch_size=batch_size, limit=limit)
+                  batch_size=bs, limit=limit)
     # Instruct → aplicar chat template si la versión lo soporta
     try:
         out = lm_eval.simple_evaluate(**kwargs, apply_chat_template=True,
@@ -77,9 +79,26 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     tasks = [t.strip() for t in args.tasks.split(",") if t.strip()]
+
+    # Pre-check de dependencias: si IFEval no tiene sus deps, la descartamos (no
+    # debe anular ARC/MMLU, que van en la misma llamada a simple_evaluate).
+    import importlib.util
+
+    def _deps_ok(task: str) -> bool:
+        if task == "ifeval":
+            for mod in ("langdetect", "immutabledict", "nltk"):
+                if importlib.util.find_spec(mod) is None:
+                    logger.warning(f"task 'ifeval' OMITIDA: falta '{mod}' "
+                                   f"(pip install langdetect immutabledict nltk)")
+                    return False
+        return True
+
+    tasks = [t for t in tasks if _deps_ok(t)]
     canonical = {"ifeval_strict": None, "ifeval_loose": None, "arc_acc": None, "mmlu_acc": None}
     raw = {}
     try:
+        if not tasks:
+            raise RuntimeError("sin tasks ejecutables (¿faltan dependencias?)")
         results = run_lmeval(tasks, args.base_model, args.adapter_path,
                              args.batch_size, args.limit)
         canonical["ifeval_strict"] = _pick(results, "ifeval", ["prompt_level_strict_acc"])
@@ -93,7 +112,9 @@ def main() -> None:
                     if isinstance(v, (int, float)):
                         raw[f"{task}/{k}"] = round(float(v), 6)
     except Exception as exc:  # noqa: BLE001 — no debe tumbar el array de eval
-        logger.warning(f"lm-eval falló ({exc}); se escriben nulos.")
+        import traceback
+        logger.warning(f"lm-eval falló ({exc}); se escriben nulos. Traceback:")
+        logger.warning(traceback.format_exc())
 
     out = {
         "metadata": {"base_model": args.base_model, "adapter_path": args.adapter_path,
