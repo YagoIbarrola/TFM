@@ -44,6 +44,17 @@ python eval/run_lmeval.py \
     --batch_size 16 \
     --step 999999
 
+# bt_asr con juez LLM en el final (re-evalúa la safety con el juez nuevo)
+HELDOUT="$WORK_DIR/data/beavertails_asr_heldout"
+if [[ "${BT_JUDGE:-llm}" == "llm" && -d "$HELDOUT" ]]; then
+    echo "=== bt_asr (juez LLM) en checkpoint-final ==="
+    python eval/run_beavertails_asr.py \
+        --base_model "$BASE_MODEL" --adapter_path "$CKPT" \
+        --heldout_dataset "$HELDOUT" \
+        --output_path "$EVAL_DIR/bt_asr.json" \
+        --batch_size 32 --judge llm --step 999999
+fi
+
 # Re-agrega task_curve para incorporar las columnas IFEval/ARC/MMLU del final
 python eval/aggregate_task.py \
     --exp_dir "$WORK_DIR/results/$EXP" \

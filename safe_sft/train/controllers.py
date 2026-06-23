@@ -64,10 +64,26 @@ class FixedController:
 
 
 class PIDController:
-    def __init__(self, start, rmin, rmax, target, kp, ki, kd, i_clamp=1.0):
-        self.ratio = start; self.rmin = rmin; self.rmax = rmax; self.target = target
+    """PID sobre e = ASR - target.
+
+    actuator:
+      - "log" (default): la salida actúa sobre log(ratio) → actualización
+        MULTIPLICATIVA (ratio *= exp(Δ)). Encaja con la no-linealidad (ASR depende
+        ~log del ratio) y nunca da ratio ≤ 0. Requiere rmin > 0.
+      - "linear": ratio += Δ.
+    Anti-windup: integración condicional — no acumula el integral cuando el ratio
+    está saturado y el error empuja aún más hacia la saturación.
+    """
+    def __init__(self, start, rmin, rmax, target, kp, ki, kd, i_clamp=1.0,
+                 actuator="log"):
+        self.actuator = actuator
+        self.rmin = max(rmin, 1e-4) if actuator == "log" else rmin
+        self.rmax = rmax
+        self.ratio = max(start, self.rmin)
+        self.target = target
         self.kp = kp; self.ki = ki; self.kd = kd; self.i_clamp = i_clamp
-        self.integral = 0.0; self.prev_e = None
+        self.integral = 0.0
+        self.prev_e = None
 
     def propose(self):
         return self.ratio
@@ -76,12 +92,24 @@ class PIDController:
         if asr is None:
             return {"action": "pid(skip)", "reward": "", "ratio_next": self.ratio}
         e = asr - self.target
-        self.integral = _clip(self.integral + e, -self.i_clamp, self.i_clamp)
         d = 0.0 if self.prev_e is None else (e - self.prev_e)
+
+        # Anti-windup: no integrar si saturado y el error empuja a más saturación
+        at_max = self.ratio >= self.rmax - 1e-9
+        at_min = self.ratio <= self.rmin + 1e-9
+        pushing_out = (at_max and e > 0) or (at_min and e < 0)
+        if not pushing_out:
+            self.integral = _clip(self.integral + e, -self.i_clamp, self.i_clamp)
+
         delta = self.kp * e + self.ki * self.integral + self.kd * d
-        self.ratio = _clip(self.ratio + delta, self.rmin, self.rmax)
+        if self.actuator == "log":
+            import math
+            self.ratio = _clip(math.exp(math.log(self.ratio) + delta), self.rmin, self.rmax)
+        else:
+            self.ratio = _clip(self.ratio + delta, self.rmin, self.rmax)
         self.prev_e = e
-        return {"action": f"pid Δ={delta:+.3f}", "reward": round(e, 4), "ratio_next": self.ratio}
+        return {"action": f"pid({self.actuator}) Δ={delta:+.3f}",
+                "reward": round(e, 4), "ratio_next": self.ratio}
 
 
 class BanditController:
@@ -149,7 +177,8 @@ def build_controller(dyn: dict):
     if ctype == "pid":
         return PIDController(start, rmin, rmax, target,
                              float(c.get("kp", 0.6)), float(c.get("ki", 0.15)),
-                             float(c.get("kd", 0.1)), float(c.get("i_clamp", 1.0)))
+                             float(c.get("kd", 0.1)), float(c.get("i_clamp", 1.0)),
+                             actuator=c.get("actuator", "log"))
     if ctype == "bandit":
         arms = [float(a) for a in c.get("arms", [0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30])]
         return BanditController(arms, target,

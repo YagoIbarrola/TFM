@@ -34,13 +34,14 @@ dynamic:
   base_dataset:   data/metamath_train
   safety_dataset: data/beavertails_selfalign_train
   heldout_asr:    data/beavertails_asr_heldout
+  bt_judge:       llm
   total_steps: 9000
   round_steps: 500
   start_ratio: 0.10
-  min_ratio:   0.0
+  min_ratio:   0.01
   max_ratio:   0.30
-  target_asr:  0.20
-  target_from_baseline: true   # el controlador apunta al ASR del Llama original
+  target_asr:  0.1
+  target_from_baseline: false
   band_width: 0.10              # banda (deadband) alrededor del baseline
   controller:
     type: bandit

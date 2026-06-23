@@ -127,6 +127,7 @@ if [[ -d "$HELDOUT" ]]; then
         --heldout_dataset "$HELDOUT" \
         --output_path "$CKPT_DIR/bt_asr.json" \
         --batch_size 32 \
+        --judge "${BT_JUDGE:-keyword}" \
         --step "$STEP" \
         --epoch "$EPOCH"
 else

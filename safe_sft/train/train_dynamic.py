@@ -43,7 +43,7 @@ from transformers import (AutoModelForCausalLM, AutoTokenizer,
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))            # train/ (controllers)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "eval"))
-from run_beavertails_asr import compute_bt_asr  # noqa: E402
+from run_beavertails_asr import compute_bt_asr, llm_judge_refusals  # noqa: E402
 from controllers import build_controller  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -140,6 +140,20 @@ def main() -> None:
                             lr=tr["learning_rate"], weight_decay=tr["weight_decay"])
     sched = get_cosine_schedule_with_warmup(opt, warmup, total_steps)
 
+    # --- Juez del sensor bt_asr: keyword (default) o LLM (base congelado) ---
+    bt_judge = dyn.get("bt_judge", "keyword")
+    judge_fn = None
+    if bt_judge == "llm":
+        def judge_fn(prompts, completions):
+            # juez = modelo BASE congelado (adapter desactivado), sin recargar nada
+            with model.disable_adapter():
+                return llm_judge_refusals(
+                    model, tokenizer, prompts, completions,
+                    batch_size=int(dyn.get("asr_heldout_batch_size", 32)))
+        logger.info("Sensor bt_asr: juez LLM (base 3B congelado vía disable_adapter)")
+    else:
+        logger.info("Sensor bt_asr: juez keyword")
+
     # --- Target = ASR del modelo ORIGINAL (auto-calibración) ---
     # LoRA recién inicializado tiene ΔW=0 → el modelo aún se comporta como el base.
     if dyn.get("target_from_baseline"):
@@ -147,7 +161,8 @@ def main() -> None:
         base_asr = compute_bt_asr(
             model, tokenizer, heldout_prompts,
             batch_size=int(dyn.get("asr_heldout_batch_size", 32)),
-            max_new_tokens=int(dyn.get("asr_max_new_tokens", 128)))["asr"]
+            max_new_tokens=int(dyn.get("asr_max_new_tokens", 128)),
+            judge_fn=judge_fn)["asr"]
         dyn["target_asr"] = round(float(base_asr), 4)
         bw = float(dyn.get("band_width", 0.10))
         ctrl_cfg = dyn.setdefault("controller", {})
@@ -220,7 +235,8 @@ def main() -> None:
         # ---- Medición de ASR (sensor del controlador) ----
         asr_res = compute_bt_asr(model, tokenizer, heldout_prompts,
                                  batch_size=int(dyn.get("asr_heldout_batch_size", 32)),
-                                 max_new_tokens=int(dyn.get("asr_max_new_tokens", 128)))
+                                 max_new_tokens=int(dyn.get("asr_max_new_tokens", 128)),
+                                 judge_fn=judge_fn)
         asr = asr_res["asr"]
 
         # ---- Controlador: actualiza estado y propone el ratio siguiente ----
