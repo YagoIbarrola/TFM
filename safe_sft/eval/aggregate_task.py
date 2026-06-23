@@ -67,7 +67,8 @@ def main() -> None:
             "xstest_refusal_safe": None, "xstest_refusal_unsafe": None,
             "xstest_n_safe": None, "xstest_n_unsafe": None,
             "bt_asr": None, "bt_asr_n": None,
-            "task_json": "", "xstest_json": "", "bt_asr_json": "",
+            "ifeval_strict": None, "ifeval_loose": None, "arc_acc": None, "mmlu_acc": None,
+            "task_json": "", "xstest_json": "", "bt_asr_json": "", "lmeval_json": "",
         })
 
     # --- task_eval.json ---
@@ -123,6 +124,23 @@ def main() -> None:
         r["bt_asr"] = agg.get("asr")
         r["bt_asr_n"] = agg.get("n_total")
         r["bt_asr_json"] = str(jp)
+        if r["epoch"] is None:
+            r["epoch"] = meta.get("epoch")
+
+    # --- lmeval.json (IFEval / ARC / MMLU) ---
+    for jp in sorted(exp_dir.rglob("lmeval.json")):
+        data = _load(jp)
+        if data is None:
+            continue
+        meta = data.get("metadata", {})
+        res = data.get("results", {})
+        step = meta.get("step") if meta.get("step") is not None else extract_step(jp)
+        if step is None:
+            continue
+        r = _row(step, meta.get("epoch"))
+        for key in ("ifeval_strict", "ifeval_loose", "arc_acc", "mmlu_acc"):
+            r[key] = res.get(key)
+        r["lmeval_json"] = str(jp)
         if r["epoch"] is None:
             r["epoch"] = meta.get("epoch")
 

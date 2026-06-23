@@ -13,7 +13,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:nvidia_h100_nvl:1
-#SBATCH --time=03:00:00
+#SBATCH --time=04:00:00
 #SBATCH --output=logs/eval_%x_%A_%a.out
 #SBATCH --error=logs/eval_%x_%A_%a.err
 
@@ -133,4 +133,15 @@ else
     echo "--- [4] BT-ASR omitido (no existe $HELDOUT) ---"
 fi
 
-echo "=== Eval done for $CKPT_NAME (harmbench + xstest + task + bt_asr) ==="
+# --- 5) lm-eval (IFEval / ARC; MMLU opcional vía LMEVAL_TASKS) ---
+echo "--- [5] lm-eval (${LMEVAL_TASKS:-ifeval,arc_challenge}) ---"
+python eval/run_lmeval.py \
+    --base_model "$BASE_MODEL" \
+    --adapter_path "$CHECKPOINT" \
+    --output_path "$EVAL_DIR/lmeval.json" \
+    --tasks "${LMEVAL_TASKS:-ifeval,arc_challenge}" \
+    --batch_size 16 \
+    --step "$STEP" \
+    --epoch "$EPOCH"
+
+echo "=== Eval done for $CKPT_NAME (harmbench + xstest + task + bt_asr + lmeval) ==="

@@ -388,6 +388,19 @@ def main() -> None:
         ]
         if with_gsm8k:
             metrics.append(("task_curve.csv", "gsm8k_acc", "GSM8K accuracy ↑", (0, 1), None))
+        metrics.append(("task_curve.csv", "ifeval_strict", "IFEval strict ↑", (0, 1), None))
+        metrics.append(("task_curve.csv", "arc_acc", "ARC-Challenge ↑", (0, 1), None))
+
+        # quita paneles de métricas sin ningún dato (p. ej. IFEval antes de re-evaluar)
+        def _has_data(csv, col):
+            for exp, _ in conds:
+                df = load_curve(results_dir, exp, csv)
+                if df is not None and col in df.columns and not df.dropna(subset=[col]).empty:
+                    return True
+            return False
+        metrics = [m for m in metrics if _has_data(m[0], m[1])]
+        if not metrics:
+            return
         nrows = (len(metrics) + 1) // 2
         fig, axes = plt.subplots(nrows, 2, figsize=(13, 4.2 * nrows))
         axes = axes.flatten()
@@ -431,9 +444,11 @@ def main() -> None:
         ("exp_dynamic_sa_math_bandit", "din. bandit"),
     ], True, "17_math_selfalign_grid.png")
 
-    # --- 18) CONTROL: estático 15% vs dinámico-fijo 15% (igualdad de condiciones) ---
-    factorial_grid("Control — estático 15% vs dinámico-fijo 15%", [
-        ("exp_alpaca_selfalign", "estático 15%"),
+    # --- 18) CONTROL: estático (s42) vs estático (s43) vs dinámico-fijo 15% ---
+    # s42 vs s43 = ruido de semilla; vs dinámico-fijo = gap de implementación.
+    factorial_grid("Control — ruido de semilla vs gap de implementación (15%)", [
+        ("exp_alpaca_selfalign", "estático 15% (s42)"),
+        ("exp_sa15_seed43", "estático 15% (s43)"),
         ("exp_dynamic_sa_fixed15", "dinámico fijo 15%"),
     ], False, "18_control_static_vs_fixeddyn.png")
 
