@@ -163,13 +163,14 @@ def main() -> None:
             batch_size=int(dyn.get("asr_heldout_batch_size", 32)),
             max_new_tokens=int(dyn.get("asr_max_new_tokens", 128)),
             judge_fn=judge_fn)["asr"]
-        dyn["target_asr"] = round(float(base_asr), 4)
+        mult = float(dyn.get("target_baseline_mult", 1.0))
+        dyn["target_asr"] = round(float(base_asr) * mult, 4)
         bw = float(dyn.get("band_width", 0.10))
         ctrl_cfg = dyn.setdefault("controller", {})
         if ctrl_cfg.get("type", "deadband") == "deadband":
             ctrl_cfg["deadband_low"] = round(max(0.0, dyn["target_asr"] - bw / 2), 4)
             ctrl_cfg["deadband_high"] = round(dyn["target_asr"] + bw / 2, 4)
-        logger.info(f"target_asr = ASR del modelo original = {dyn['target_asr']}")
+        logger.info(f"target_asr = base({round(float(base_asr),4)}) × {mult} = {dyn['target_asr']}")
 
     # --- Controlador (enchufable: deadband / pid / bandit) ---
     controller = build_controller(dyn)
