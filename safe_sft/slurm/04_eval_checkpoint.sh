@@ -94,6 +94,15 @@ python eval/run_harmbench.py \
     --step "$STEP" \
     --epoch "$EPOCH"
 
+# --- 1b) HarmBench con juez LLM (mismo juez que el sensor del dinámico) ---
+if [[ "${HARMBENCH_JUDGE:-keyword}" == "llm" ]]; then
+    echo "--- [1b] HarmBench juez LLM (${HARMBENCH_JUDGE_VARIANT:-harm}) ---"
+    python eval/judge_harmbench_llm.py \
+        --exp_dir "$EVAL_DIR" \
+        --judge_model "$BASE_MODEL" \
+        --variant "${HARMBENCH_JUDGE_VARIANT:-harm}"
+fi
+
 # --- 2) XSTest (over-refusal) ---
 echo "--- [2/3] XSTest ---"
 python eval/run_xstest.py \

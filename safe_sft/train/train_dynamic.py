@@ -114,9 +114,22 @@ def main() -> None:
     # --- Datos ---
     task_texts = list(load_from_disk(resolve(dyn["base_dataset"], wd))["text"])
     safety_texts = list(load_from_disk(resolve(dyn["safety_dataset"], wd))["text"])
-    heldout_prompts = list(load_from_disk(resolve(dyn["heldout_asr"], wd))["prompt"])
+
+    # --- Sensor del controlador: prompts sobre los que se mide el ASR cada ronda ---
+    sensor = dyn.get("sensor", "bt_heldout")   # bt_heldout | harmbench
+    if sensor == "harmbench":
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "eval"))
+        from run_harmbench import load_behaviors  # noqa: E402
+        cache = Path(resolve("results/harmbench_cache", wd))
+        behs = load_behaviors(cache_dir=cache)
+        behs = [b for b in behs if "copyright" not in (b.get("category", "").lower())]
+        sensor_prompts = [b["behavior"] for b in behs][:int(dyn.get("sensor_n", 200))]
+        sensor_max_new = int(dyn.get("sensor_max_new_tokens", 256))
+    else:
+        sensor_prompts = list(load_from_disk(resolve(dyn["heldout_asr"], wd))["prompt"])
+        sensor_max_new = int(dyn.get("asr_max_new_tokens", 128))
     logger.info(f"Task pool={len(task_texts)} | safety pool={len(safety_texts)} | "
-                f"held-out ASR={len(heldout_prompts)}")
+                f"sensor={sensor} ({len(sensor_prompts)} prompts, max_new={sensor_max_new})")
 
     # --- Modelo + LoRA ---
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
@@ -140,8 +153,9 @@ def main() -> None:
                             lr=tr["learning_rate"], weight_decay=tr["weight_decay"])
     sched = get_cosine_schedule_with_warmup(opt, warmup, total_steps)
 
-    # --- Juez del sensor bt_asr: keyword (default) o LLM (base congelado) ---
+    # --- Juez del sensor: keyword (default) o LLM (base congelado) ---
     bt_judge = dyn.get("bt_judge", "keyword")
+    judge_variant = dyn.get("bt_judge_prompt", "harm" if sensor == "harmbench" else "refuse")
     judge_fn = None
     if bt_judge == "llm":
         def judge_fn(prompts, completions):
@@ -149,19 +163,20 @@ def main() -> None:
             with model.disable_adapter():
                 return llm_judge_refusals(
                     model, tokenizer, prompts, completions,
-                    batch_size=int(dyn.get("asr_heldout_batch_size", 32)))
-        logger.info("Sensor bt_asr: juez LLM (base 3B congelado vía disable_adapter)")
+                    batch_size=int(dyn.get("asr_heldout_batch_size", 32)),
+                    variant=judge_variant)
+        logger.info(f"Sensor: juez LLM (base congelado, variante={judge_variant})")
     else:
-        logger.info("Sensor bt_asr: juez keyword")
+        logger.info("Sensor: juez keyword")
 
     # --- Target = ASR del modelo ORIGINAL (auto-calibración) ---
     # LoRA recién inicializado tiene ΔW=0 → el modelo aún se comporta como el base.
     if dyn.get("target_from_baseline"):
-        logger.info("Midiendo ASR baseline (modelo sin entrenar) en el held-out...")
+        logger.info("Midiendo ASR baseline (modelo sin entrenar) en el sensor...")
         base_asr = compute_bt_asr(
-            model, tokenizer, heldout_prompts,
+            model, tokenizer, sensor_prompts,
             batch_size=int(dyn.get("asr_heldout_batch_size", 32)),
-            max_new_tokens=int(dyn.get("asr_max_new_tokens", 128)),
+            max_new_tokens=sensor_max_new,
             judge_fn=judge_fn)["asr"]
         mult = float(dyn.get("target_baseline_mult", 1.0))
         dyn["target_asr"] = round(float(base_asr) * mult, 4)
@@ -234,9 +249,9 @@ def main() -> None:
         list_path.write_text("\n".join(str(c.resolve()) for c in ckpts) + "\n")
 
         # ---- Medición de ASR (sensor del controlador) ----
-        asr_res = compute_bt_asr(model, tokenizer, heldout_prompts,
+        asr_res = compute_bt_asr(model, tokenizer, sensor_prompts,
                                  batch_size=int(dyn.get("asr_heldout_batch_size", 32)),
-                                 max_new_tokens=int(dyn.get("asr_max_new_tokens", 128)),
+                                 max_new_tokens=sensor_max_new,
                                  judge_fn=judge_fn)
         asr = asr_res["asr"]
 

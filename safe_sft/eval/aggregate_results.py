@@ -38,6 +38,8 @@ def parse_args() -> argparse.Namespace:
                    help="Directorio del experimento (contiene checkpoint-*/harmbench.json)")
     p.add_argument("--baseline_json", default=None,
                    help="Ruta al baseline harmbench.json para incluirlo como step=0")
+    p.add_argument("--json_name", default="harmbench.json",
+                   help="Nombre del JSON por checkpoint a agregar (p. ej. harmbench_llm.json)")
     p.add_argument("--output_csv", required=True)
     return p.parse_args()
 
@@ -132,7 +134,7 @@ def main() -> None:
 
     # Per-checkpoint evals
     exp_dir = Path(args.exp_dir)
-    for json_path in sorted(exp_dir.rglob("harmbench.json")):
+    for json_path in sorted(exp_dir.rglob(args.json_name)):
         row = load_eval(json_path)
         if row is not None and row["step"] != 0:
             rows.append(row)

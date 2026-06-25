@@ -25,6 +25,20 @@ EXP="${EXP:-exp_alpaca_dynamic}"
 ARRAY_SIZE="${ARRAY_SIZE:-30}"
 export EXP
 
+# Consistencia juez sensor↔test: el juez del HarmBench del test = el del sensor,
+# leído del config (dynamic.bt_judge / bt_judge_prompt). Una única fuente de verdad.
+CFG=$(ls configs/${EXP}.yaml configs/${EXP}_*.yaml 2>/dev/null | head -1)
+if [[ -n "$CFG" ]]; then
+    read HARMBENCH_JUDGE HARMBENCH_JUDGE_VARIANT < <(python - "$CFG" <<'PY'
+import sys, yaml
+d = (yaml.safe_load(open(sys.argv[1])) or {}).get("dynamic", {})
+print(d.get("bt_judge", "keyword"), d.get("bt_judge_prompt", "harm"))
+PY
+)
+    export HARMBENCH_JUDGE HARMBENCH_JUDGE_VARIANT
+    echo "Juez (sensor y test): $HARMBENCH_JUDGE / $HARMBENCH_JUDGE_VARIANT"
+fi
+
 GPU="${GPU:-l40}"
 case "${GPU,,}" in
     l40)  PART="$PARTITION_L40"; GRES="$GRES_L40"

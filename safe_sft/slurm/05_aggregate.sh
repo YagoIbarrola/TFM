@@ -35,6 +35,14 @@ python eval/aggregate_results.py \
     --baseline_json "$BASELINE" \
     --output_csv "$SEC_CSV"
 
+# 1b) Curva de safety con juez LLM (si existe harmbench_llm.json; no toca la keyword)
+if find "$EXP_DIR" -name harmbench_llm.json 2>/dev/null | grep -q .; then
+    echo "--- security_curve_llm.csv (juez LLM) ---"
+    python eval/aggregate_results.py \
+        --exp_dir "$EXP_DIR" --json_name harmbench_llm.json \
+        --output_csv "$EXP_DIR/security_curve_llm.csv"
+fi
+
 # 2) Curva de task + over-refusal (perplexity / GSM8K / XSTest)
 echo "--- task_curve.csv ---"
 python eval/aggregate_task.py \
@@ -45,6 +53,7 @@ python eval/aggregate_task.py \
 mkdir -p "$PROJECT_DIR/results/$EXP"
 cp "$SEC_CSV" "$PROJECT_DIR/results/$EXP/security_curve.csv"
 [[ -f "$TASK_CSV" ]] && cp "$TASK_CSV" "$PROJECT_DIR/results/$EXP/task_curve.csv"
+[[ -f "$EXP_DIR/security_curve_llm.csv" ]] && cp "$EXP_DIR/security_curve_llm.csv" "$PROJECT_DIR/results/$EXP/security_curve_llm.csv"
 echo "Backups en: $PROJECT_DIR/results/$EXP/"
 
 # Limpieza automática de adapters intermedios: las curvas (CSV) y los prompts+
