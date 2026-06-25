@@ -144,14 +144,19 @@ else
 fi
 
 # --- 5) lm-eval (IFEval / ARC; MMLU opcional vía LMEVAL_TASKS) ---
-echo "--- [5] lm-eval (${LMEVAL_TASKS:-ifeval,arc_challenge}) ---"
-python eval/run_lmeval.py \
-    --base_model "$BASE_MODEL" \
-    --adapter_path "$CHECKPOINT" \
-    --output_path "$EVAL_DIR/lmeval.json" \
-    --tasks "${LMEVAL_TASKS:-ifeval,arc_challenge}" \
-    --batch_size 16 \
-    --step "$STEP" \
-    --epoch "$EPOCH"
+# Desactivado por defecto (es el paso más lento). RUN_LMEVAL=1 para reactivarlo.
+if [[ "${RUN_LMEVAL:-0}" == "1" ]]; then
+    echo "--- [5] lm-eval (${LMEVAL_TASKS:-ifeval,arc_challenge}) ---"
+    python eval/run_lmeval.py \
+        --base_model "$BASE_MODEL" \
+        --adapter_path "$CHECKPOINT" \
+        --output_path "$EVAL_DIR/lmeval.json" \
+        --tasks "${LMEVAL_TASKS:-ifeval,arc_challenge}" \
+        --batch_size 16 \
+        --step "$STEP" \
+        --epoch "$EPOCH"
+else
+    echo "--- [5] lm-eval OMITIDO (RUN_LMEVAL=1 para activarlo) ---"
+fi
 
-echo "=== Eval done for $CKPT_NAME (harmbench + xstest + task + bt_asr + lmeval) ==="
+echo "=== Eval done for $CKPT_NAME (harmbench + xstest + task + bt_asr${RUN_LMEVAL:+ + lmeval}) ==="
