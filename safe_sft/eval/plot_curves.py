@@ -42,6 +42,10 @@ LABELS = {
     "exp_dynamic_sa_math_deadband": "Math dinámico deadband (self-align)",
     "exp_dynamic_sa_math_pid": "Math dinámico PID (self-align)",
     "exp_dynamic_sa_math_bandit": "Math dinámico bandit (self-align)",
+    "exp_dynamic_sa_pid": "PID target 0.1",
+    "exp_dynamic_pidB10": "PID target = base (×1.0)",
+    "exp_dynamic_pidB15": "PID target = base ×1.5",
+    "exp_dynamic_pidB20": "PID target = base ×2.0",
     "exp_c": "Math 0%",
     "exp_math_p5": "Math 5% (real)",
     "exp_math_p15": "Math 15% (real)",
@@ -451,6 +455,31 @@ def main() -> None:
         ("exp_sa15_seed43", "estático 15% (s43)"),
         ("exp_dynamic_sa_fixed15", "dinámico fijo 15%"),
     ], False, "18_control_static_vs_fixeddyn.png")
+
+    # --- 19) Variantes PID (target relativo al base) ---
+    pid_vars = [e for e in ["exp_dynamic_sa_pid", "exp_dynamic_pidB10",
+                            "exp_dynamic_pidB15", "exp_dynamic_pidB20"]
+                if _read_csv(results_dir / e / "dynamic_log.csv") is not None]
+    if len(pid_vars) >= 2:
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8.5), sharex=True)
+        for e in pid_vars:
+            dl = _read_csv(results_dir / e / "dynamic_log.csv")
+            line, = ax1.plot(dl["step"], dl["asr_bt"], "o-", ms=3, label=label(e))
+            # target = asr_bt - reward (PID); línea horizontal del setpoint
+            try:
+                r0 = dl.dropna(subset=["reward"]).iloc[0]
+                target = float(r0["asr_bt"]) - float(r0["reward"])
+                ax1.axhline(target, ls="--", lw=1, color=line.get_color(), alpha=0.7)
+            except Exception:
+                pass
+            ax2.plot(dl["step"], dl["ratio_used"], drawstyle="steps-post", lw=2,
+                     color=line.get_color(), label=label(e))
+        ax1.set_ylabel("ASR held-out BT (juez LLM)"); ax1.set_ylim(0, 0.6); ax1.legend(fontsize=8)
+        ax1.set_title("Variantes PID: ASR_bt (sólido) vs su target (discontinuo) y ratio elegido")
+        ax2.set_ylabel("ratio safety"); ax2.set_ylim(-0.02, 0.32)
+        ax2.set_xlabel("paso de entrenamiento"); ax2.legend(fontsize=8)
+        fig.tight_layout(); plt.savefig(out_dir / "19_pid_variants.png", dpi=130); plt.close()
+        print(f"  ✓ {out_dir / '19_pid_variants.png'}")
 
     print(f"\nFiguras en {out_dir}/")
 
