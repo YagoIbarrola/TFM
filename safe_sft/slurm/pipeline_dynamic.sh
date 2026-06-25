@@ -27,17 +27,26 @@ export EXP
 
 # Consistencia juez sensor↔test: el juez del HarmBench del test = el del sensor,
 # leído del config (dynamic.bt_judge / bt_judge_prompt). Una única fuente de verdad.
-CFG=$(ls configs/${EXP}.yaml configs/${EXP}_*.yaml 2>/dev/null | head -1)
+# Blindado: NUNCA debe tumbar el pipeline (de ahí los `|| true` y el primer
+# candidato existente). Si algo falla, se cae a keyword/harm y se avisa.
+CFG=""
+for c in "configs/${EXP}.yaml" configs/${EXP}_*.yaml; do
+    [[ -f "$c" ]] && { CFG="$c"; break; }
+done
+HARMBENCH_JUDGE="keyword"; HARMBENCH_JUDGE_VARIANT="harm"
 if [[ -n "$CFG" ]]; then
-    read HARMBENCH_JUDGE HARMBENCH_JUDGE_VARIANT < <(python - "$CFG" <<'PY'
+    JLINE=$(python - "$CFG" <<'PY' 2>/dev/null || true
 import sys, yaml
 d = (yaml.safe_load(open(sys.argv[1])) or {}).get("dynamic", {})
 print(d.get("bt_judge", "keyword"), d.get("bt_judge_prompt", "harm"))
 PY
 )
-    export HARMBENCH_JUDGE HARMBENCH_JUDGE_VARIANT
-    echo "Juez (sensor y test): $HARMBENCH_JUDGE / $HARMBENCH_JUDGE_VARIANT"
+    [[ -n "$JLINE" ]] && read -r HARMBENCH_JUDGE HARMBENCH_JUDGE_VARIANT <<<"$JLINE"
+    echo "Config: $CFG  ->  juez (sensor y test): $HARMBENCH_JUDGE / $HARMBENCH_JUDGE_VARIANT"
+else
+    echo "AVISO: no encuentro config para EXP=$EXP en configs/. Juez por defecto: keyword/harm" >&2
 fi
+export HARMBENCH_JUDGE HARMBENCH_JUDGE_VARIANT
 
 GPU="${GPU:-l40}"
 case "${GPU,,}" in
