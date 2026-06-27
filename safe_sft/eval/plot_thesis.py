@@ -260,9 +260,45 @@ def p12():
         "P12_hb_static_vs_dynamic.png")
 
 
+# --- P13: estáticos con OR-Bench (anti-over-refusal) vs sin OR ---
+def p13():
+    # (exp, label, color, ls=OR?) -> color por dosis, linestyle por OR
+    specs = [("exp_alpaca_sa5", "SA 5% (sin OR)", "C0", "--"),
+             ("exp_alpaca_saO5", "SA 5% + OR-Bench", "C0", "-"),
+             ("exp_alpaca_selfalign", "SA 15% (sin OR)", "C3", "--"),
+             ("exp_alpaca_saO15", "SA 15% + OR-Bench", "C3", "-")]
+    fig, ax = plt.subplots(1, 3, figsize=(16, 4.7))
+    fig.suptitle("P13 — Estáticos self-align: con OR-Bench (anti-over-refusal) vs sin OR",
+                 fontsize=13, fontweight="bold")
+    pts = {}
+    for e, lbl, c, ls in specs:
+        xs, asr, xo, orr = series(e); fa, fo, _ = final_point(e)
+        if xs: ax[0].plot(xs, asr, ls, color=c, marker="o", ms=3, label=lbl, alpha=.85)
+        if xo: ax[1].plot(xo, orr, ls, color=c, marker="o", ms=3, label=lbl, alpha=.85)
+        if fa is not None and fo is not None:
+            ax[2].scatter(fa, fo, color=c, s=120, marker=("o" if ls == "-" else "s"),
+                          edgecolor="k", zorder=3, label=lbl)
+            pts[e] = (fa, fo)
+    # flechas sin-OR -> con-OR (muestran el desplazamiento)
+    for a, b in [("exp_alpaca_sa5", "exp_alpaca_saO5"),
+                 ("exp_alpaca_selfalign", "exp_alpaca_saO15")]:
+        if a in pts and b in pts:
+            ax[2].annotate("", xy=pts[b], xytext=pts[a],
+                           arrowprops=dict(arrowstyle="->", color="gray", lw=1.3))
+    ax[0].axhline(BASE_ASR, color="gray", ls=":", lw=1, label=f"baseline {BASE_ASR}")
+    ax[0].set(xlabel="step", ylabel="HarmBench ASR", title="Safety (↓ mejor)")
+    ax[0].legend(fontsize=7); ax[0].grid(alpha=.3)
+    ax[1].set(xlabel="step", ylabel="XSTest over-refusal", title="Over-refusal (↓ mejor)")
+    ax[1].legend(fontsize=7); ax[1].grid(alpha=.3)
+    ax[2].set(xlabel="HarmBench ASR (↓)", ylabel="over-refusal (↓)",
+              title="Pareto final (flecha = efecto OR-Bench)")
+    ax[2].legend(fontsize=7); ax[2].grid(alpha=.3)
+    save(fig, "P13_orbench_vs_plain_static.png")
+
+
 if __name__ == "__main__":
     import shutil
-    for f in (p01, p02, p03, p04, p05, p06, p07, p08, p12):
+    for f in (p01, p02, p03, p04, p05, p06, p07, p08, p12, p13):
         f()
     # Figuras que ya existían (generadas por plot_curves.py) se alían con nombre Pxx.
     aliases = {
