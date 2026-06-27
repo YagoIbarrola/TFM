@@ -296,9 +296,81 @@ def p13():
     save(fig, "P13_orbench_vs_plain_static.png")
 
 
+# --- P14: dinámicos con OR-Bench vs sin OR (sensor HarmBench) ---
+def p14():
+    specs = [("exp_dynamic_hb_deadband", "deadband (sin OR)", "C0", "--"),
+             ("exp_dynamic_hbo_deadband", "deadband + OR-Bench", "C0", "-"),
+             ("exp_dynamic_hb_pid", "pid (sin OR)", "C3", "--"),
+             ("exp_dynamic_hbo_pid", "pid + OR-Bench", "C3", "-")]
+    fig, ax = plt.subplots(1, 3, figsize=(16, 4.7))
+    fig.suptitle("P14 — Dinámicos (sensor HarmBench): con OR-Bench vs sin OR",
+                 fontsize=13, fontweight="bold")
+    pts = {}
+    for e, lbl, c, ls in specs:
+        xs, asr, xo, orr = series(e); fa, fo, _ = final_point(e)
+        if xs: ax[0].plot(xs, asr, ls, color=c, marker="o", ms=3, label=lbl, alpha=.85)
+        if xo: ax[1].plot(xo, orr, ls, color=c, marker="o", ms=3, label=lbl, alpha=.85)
+        if fa is not None and fo is not None:
+            ax[2].scatter(fa, fo, color=c, s=120, marker="o", edgecolor="k",
+                          zorder=3, label=lbl); pts[e] = (fa, fo)
+    for a, b in [("exp_dynamic_hb_deadband", "exp_dynamic_hbo_deadband"),
+                 ("exp_dynamic_hb_pid", "exp_dynamic_hbo_pid")]:
+        if a in pts and b in pts:
+            ax[2].annotate("", xy=pts[b], xytext=pts[a],
+                           arrowprops=dict(arrowstyle="->", color="gray", lw=1.3))
+    ax[0].axhline(BASE_ASR, color="gray", ls=":", lw=1, label=f"baseline {BASE_ASR}")
+    ax[0].set(xlabel="step", ylabel="HarmBench ASR", title="Safety (↓ mejor)")
+    ax[0].legend(fontsize=7); ax[0].grid(alpha=.3)
+    ax[1].set(xlabel="step", ylabel="XSTest over-refusal", title="Over-refusal (↓ mejor)")
+    ax[1].legend(fontsize=7); ax[1].grid(alpha=.3)
+    ax[2].set(xlabel="HarmBench ASR (↓)", ylabel="over-refusal (↓)",
+              title="Pareto final (flecha = efecto OR-Bench)")
+    ax[2].legend(fontsize=7); ax[2].grid(alpha=.3)
+    save(fig, "P14_orbench_vs_plain_dynamic.png")
+
+
+# --- P15: Pareto maestro (todo: estáticos/dinámicos, con/sin OR) ---
+def p15():
+    groups = [
+        ("exp_a", "Alpaca 0% (sin safety)", "gray", "X"),
+        ("exp_alpaca_sa5", "static SA 5%", "C0", "s"),
+        ("exp_alpaca_selfalign", "static SA 15%", "C0", "D"),
+        ("exp_alpaca_saO5", "static SA 5% + OR", "C2", "s"),
+        ("exp_alpaca_saO15", "static SA 15% + OR", "C2", "D"),
+        ("exp_dynamic_hb_deadband", "dyn deadband", "C3", "o"),
+        ("exp_dynamic_hb_pid", "dyn pid", "C3", "^"),
+        ("exp_dynamic_hbo_deadband", "dyn deadband + OR", "C4", "o"),
+        ("exp_dynamic_hbo_pid", "dyn pid + OR", "C4", "^"),
+    ]
+    fig, a = plt.subplots(figsize=(8.5, 6.2))
+    for e, lbl, c, mk in groups:
+        fa, fo, _ = final_point(e)
+        if fa is not None and fo is not None:
+            a.scatter(fa, fo, color=c, s=150, marker=mk, edgecolor="k",
+                      zorder=3, label=lbl)
+    a.axvline(BASE_ASR, color="gray", ls=":", lw=1)
+    a.text(BASE_ASR + .005, a.get_ylim()[1] * .02, "baseline ASR 0.085",
+           rotation=90, va="bottom", fontsize=7, color="gray")
+    a.set(xlabel="HarmBench ASR (↓ mejor)", ylabel="XSTest over-refusal (↓ mejor)",
+          title="P15 — Pareto maestro (esquina inf-izq = ideal)")
+    a.legend(fontsize=8, loc="upper right"); a.grid(alpha=.3)
+    save(fig, "P15_pareto_maestro.png")
+
+
+# --- P16: estáticos vs dinámicos, ambos con OR-Bench ---
+def p16():
+    asr_xstest_panels(
+        "P16 — Con OR-Bench: estáticos vs dinámicos (HarmBench / XSTest)",
+        [("exp_alpaca_saO5", "static SA 5% + OR", "static"),
+         ("exp_alpaca_saO15", "static SA 15% + OR", "static"),
+         ("exp_dynamic_hbo_deadband", "dyn deadband + OR", "dyn"),
+         ("exp_dynamic_hbo_pid", "dyn pid + OR", "dyn")],
+        "P16_orbench_static_vs_dynamic.png")
+
+
 if __name__ == "__main__":
     import shutil
-    for f in (p01, p02, p03, p04, p05, p06, p07, p08, p12, p13):
+    for f in (p01, p02, p03, p04, p05, p06, p07, p08, p12, p13, p14, p15, p16):
         f()
     # Figuras que ya existían (generadas por plot_curves.py) se alían con nombre Pxx.
     aliases = {
