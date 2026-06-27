@@ -368,9 +368,49 @@ def p16():
         "P16_orbench_static_vs_dynamic.png")
 
 
+# --- P17: trayectorias en el plano ASR x over-refusal (con OR-Bench) ---
+def p17():
+    def traj(e):
+        s = {r["step"]: r for r in read(e, "security_curve.csv")}
+        t = {r["step"]: r for r in read(e, "task_curve.csv")}
+        rows = []
+        for st in s:
+            if st in (None, "", "999999"):
+                continue
+            a = s[st].get("asr_standard"); o = t.get(st, {}).get("xstest_refusal_safe")
+            if a not in (None, "") and o not in (None, ""):
+                rows.append((int(st), float(a), float(o)))
+        rows.sort()
+        return rows
+
+    specs = [("exp_alpaca_saO5", "static SA 5% + OR", "C0", "--"),
+             ("exp_alpaca_saO15", "static SA 15% + OR", "C1", "--"),
+             ("exp_dynamic_hbo_deadband", "dyn deadband + OR", "C2", "-"),
+             ("exp_dynamic_hbo_pid", "dyn pid + OR", "C3", "-")]
+    fig, a = plt.subplots(figsize=(8.8, 6.4))
+    for e, lbl, c, ls in specs:
+        r = traj(e)
+        if not r:
+            continue
+        _, asr, orr = zip(*r)
+        a.plot(asr, orr, ls, color=c, marker="o", ms=4, lw=1.3, alpha=.7, label=lbl)
+        a.scatter([asr[0]], [orr[0]], color="white", edgecolor=c, s=90,
+                  zorder=4, linewidths=1.5)               # inicio (hueco)
+        a.scatter([asr[-1]], [orr[-1]], color=c, marker="*", s=320,
+                  edgecolor="k", zorder=5)                 # final (estrella)
+    a.axvline(BASE_ASR, color="gray", ls=":", lw=1)
+    a.text(BASE_ASR + .003, a.get_ylim()[0], "baseline ASR 0.085", rotation=90,
+           va="bottom", fontsize=7, color="gray")
+    a.set(xlabel="HarmBench ASR (↓ mejor)", ylabel="XSTest over-refusal (↓ mejor)",
+          title="P17 — Trayectorias durante el entrenamiento (con OR-Bench)\n"
+                "○ inicio · ★ final · esquina inf-izq = ideal")
+    a.legend(fontsize=8, loc="best"); a.grid(alpha=.3)
+    save(fig, "P17_orbench_trayectorias_pareto.png")
+
+
 if __name__ == "__main__":
     import shutil
-    for f in (p01, p02, p03, p04, p05, p06, p07, p08, p12, p13, p14, p15, p16):
+    for f in (p01, p02, p03, p04, p05, p06, p07, p08, p12, p13, p14, p15, p16, p17):
         f()
     # Figuras que ya existían (generadas por plot_curves.py) se alían con nombre Pxx.
     aliases = {
