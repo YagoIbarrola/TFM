@@ -472,9 +472,61 @@ def p19():
     save(fig, "P19_orbench_mean_trajectories.png")
 
 
+# --- P20: frente de Pareto del dinámico barriendo el target ASR (×1, ×2) ---
+def p20():
+    def ms(exps):
+        xs, ys = [], []
+        for e in exps:
+            fa, fo, _ = final_point(e)
+            if fa is not None and fo is not None:
+                xs.append(fa); ys.append(fo)
+        if not xs:
+            return None
+        return np.mean(xs), np.mean(ys), np.std(xs), np.std(ys), xs, ys
+
+    fronts = [
+        ("deadband", "C2", "o", [
+            ("×1 (~0.085)", ["exp_dynamic_hbo_deadband", "exp_dynamic_hbo_deadband_s43", "exp_dynamic_hbo_deadband_s44"]),
+            ("×2 (~0.17)", ["exp_dynamic_hbo_deadband_m2", "exp_dynamic_hbo_deadband_m2_s43", "exp_dynamic_hbo_deadband_m2_s44"])]),
+        ("pid", "C3", "^", [
+            ("×1 (~0.085)", ["exp_dynamic_hbo_pid", "exp_dynamic_hbo_pid_s43", "exp_dynamic_hbo_pid_s44"]),
+            ("×2 (~0.17)", ["exp_dynamic_hbo_pid_m2", "exp_dynamic_hbo_pid_m2_s43", "exp_dynamic_hbo_pid_m2_s44"])]),
+    ]
+    # estáticos con OR: frente de dosis (5% -> 15%)
+    statics = ("static + OR", "C0", "s", [
+        ("5%", ["exp_alpaca_saO5", "exp_alpaca_saO5_s43", "exp_alpaca_saO5_s44"]),
+        ("15%", ["exp_alpaca_saO15", "exp_alpaca_saO15_s43", "exp_alpaca_saO15_s44"])])
+
+    fig, a = plt.subplots(figsize=(8.8, 6.3))
+    for ctrl, c, mk, levels in fronts + [statics]:
+        mxs, mys = [], []
+        sweep = "dose" if ctrl == "static + OR" else "target"
+        for tlabel, exps in levels:
+            r = ms(exps)
+            if r is None:
+                continue
+            mx, my, sx, sy, xs, ys = r
+            a.scatter(xs, ys, color=c, marker=mk, s=45, alpha=.25, zorder=2)
+            a.errorbar(mx, my, xerr=sx, yerr=sy, color=c, marker=mk, ms=13, mec="k",
+                       capsize=4, lw=1.5, zorder=4)
+            a.annotate(tlabel, (mx, my), fontsize=7, xytext=(6, 6),
+                       textcoords="offset points", color=c)
+            mxs.append(mx); mys.append(my)
+        if len(mxs) >= 2:
+            lbl = f"{ctrl} ({sweep} sweep)" if ctrl == "static + OR" else f"dyn {ctrl} (target sweep)"
+            a.plot(mxs, mys, color=c, lw=1.8, alpha=.8, label=lbl)
+    a.axvline(BASE_ASR, color="gray", ls=":", lw=1)
+    a.text(BASE_ASR + .002, a.get_ylim()[0], "baseline ASR 0.085", rotation=90,
+           va="bottom", fontsize=7, color="gray")
+    a.set(xlabel="HarmBench ASR (↓ mejor)", ylabel="XSTest over-refusal (↓ mejor)",
+          title="P20 — Pareto con OR-Bench: dinámico (barrido target) vs estático (barrido dosis), media±std n=3")
+    a.legend(fontsize=9); a.grid(alpha=.3)
+    save(fig, "P20_dynamic_pareto_front.png")
+
+
 if __name__ == "__main__":
     import shutil
-    for f in (p01, p02, p03, p04, p05, p06, p07, p08, p12, p13, p14, p15, p16, p17, p18, p19):
+    for f in (p01, p02, p03, p04, p05, p06, p07, p08, p12, p13, p14, p15, p16, p17, p18, p19, p20):
         f()
     # Figuras que ya existían (generadas por plot_curves.py) se alían con nombre Pxx.
     aliases = {

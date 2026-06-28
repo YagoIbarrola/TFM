@@ -1,0 +1,71 @@
+# Régimen DINÁMICO — Alpaca + safety self-align, ratio adaptativo por ASR.
+# Variante del dinámico con las respuestas ideales auto-generadas como pool de
+# safety. Hipótesis: al ser in-distribution, el controlador logrará mantener el
+# ASR en banda con MENOS over-refusal que con canned.
+
+experiment_name: exp_dynamic_hbo_deadband_m3
+
+train_dataset: data/alpaca_train
+eval_dataset:  data/alpaca_val
+output_dir:    results/exp_dynamic_hbo_deadband_m3
+
+model_path: models/Llama-3.2-3B-Instruct
+
+peft:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: none
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  task_type: CAUSAL_LM
+
+training:
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  bf16: true
+  fp16: false
+  logging_steps: 50
+  seed: 42
+
+sft:
+  max_length: 1024
+
+dynamic:
+  base_dataset:   data/alpaca_train
+  safety_dataset: data/safety_pool_orbench
+  heldout_asr:    data/beavertails_asr_heldout
+  sensor: harmbench
+  sensor_n: 200
+  sensor_max_new_tokens: 128
+  bt_judge:       keyword
+
+  total_steps: 9000
+  round_steps: 500
+
+  start_ratio: 0.10
+  min_ratio:   0.01        # floor > 0 (necesario para adaptación multiplicativa)
+  max_ratio:   0.30
+  target_asr:  0.1
+  target_from_baseline: true
+  target_baseline_mult: 3.0
+  band_width: 0.10              # banda (deadband) alrededor del baseline
+
+  controller:
+    type: deadband
+    mode: multiplicative   # ASR>banda → ×up ; ASR<banda → ×down
+    deadband_low:  0.205
+    deadband_high: 0.305
+    up:   2.0
+    down: 0.5
+
+  asr_heldout_batch_size: 32
+  asr_max_new_tokens: 128
+
+wandb:
+  project: safe_sft_tfm
+  run_name: exp_dynamic_hbo_deadband_m3
+  tags: [alpaca, dynamic, selfalign, llama32_3b, controller_deadband]
