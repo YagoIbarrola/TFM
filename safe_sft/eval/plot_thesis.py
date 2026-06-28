@@ -22,6 +22,10 @@ FIG = os.path.join(RES, "figures")
 os.makedirs(FIG, exist_ok=True)
 BASE_ASR = 0.085
 
+# Tamaño de fuente grande para los trípticos (legibilidad en la memoria).
+FONTS = {"axes.titlesize": 16, "axes.labelsize": 15, "xtick.labelsize": 13,
+         "ytick.labelsize": 13, "legend.fontsize": 12}
+
 
 def read(e, name):
     p = os.path.join(RES, e, name)
@@ -78,48 +82,49 @@ def asr_xstest_panels(title, items, out, pareto=True, orr_bars=False,
     pareto_xlim/ylim: límites fijos para no exagerar diferencias mínimas.
     Los puntos del Pareto van en LEYENDA (no anotados) para no solaparse."""
     n = 3 if pareto else 2
-    fig, ax = plt.subplots(1, n, figsize=(5.3 * n, 4.7))
-    fig.suptitle(title, fontsize=13, fontweight="bold")
-    cmap = plt.get_cmap("tab10")
-    blbl, bval, bcol = [], [], []
-    for i, (e, lbl, kind) in enumerate(items):
-        c = cmap(i % 10); ls = "--" if kind == "static" else "-"
-        mk = "s" if kind == "static" else "o"
-        xs, asr, xo, orr = series(e); fa, fo, _ = final_point(e)
-        if xs:
-            ax[0].plot(xs, asr, ls, color=c, marker="o", ms=3, label=lbl, alpha=.85)
+    with plt.rc_context(FONTS):
+        fig, ax = plt.subplots(1, n, figsize=(5.9 * n, 5.2))
+        fig.suptitle(title, fontsize=17, fontweight="bold")
+        cmap = plt.get_cmap("tab10")
+        blbl, bval, bcol = [], [], []
+        for i, (e, lbl, kind) in enumerate(items):
+            c = cmap(i % 10); ls = "--" if kind == "static" else "-"
+            mk = "s" if kind == "static" else "o"
+            xs, asr, xo, orr = series(e); fa, fo, _ = final_point(e)
+            if xs:
+                ax[0].plot(xs, asr, ls, color=c, marker="o", ms=4, label=lbl, alpha=.85)
+            if orr_bars:
+                blbl.append(lbl); bval.append(fo if fo is not None else 0); bcol.append(c)
+            elif xo:
+                ax[1].plot(xo, orr, ls, color=c, marker="o", ms=4, label=lbl, alpha=.85)
+            elif fo is not None:
+                ax[1].axhline(fo, color=c, ls=":", lw=1.6, alpha=.85, label=f"{lbl} (final)")
+            if pareto and fa is not None and fo is not None:
+                ax[2].scatter(fa, fo, color=c, s=150, marker=mk, edgecolor="k",
+                              zorder=3, label=lbl)
+        ax[0].axhline(BASE_ASR, color="gray", ls=":", lw=1, label=f"baseline {BASE_ASR}")
+        ax[0].set(xlabel="step", ylabel="HarmBench ASR", title="Safety (↓ mejor)")
+        ax[0].legend(); ax[0].grid(alpha=.3)
         if orr_bars:
-            blbl.append(lbl); bval.append(fo if fo is not None else 0); bcol.append(c)
-        elif xo:
-            ax[1].plot(xo, orr, ls, color=c, marker="o", ms=3, label=lbl, alpha=.85)
-        elif fo is not None:
-            ax[1].axhline(fo, color=c, ls=":", lw=1.4, alpha=.85, label=f"{lbl} (final)")
-        if pareto and fa is not None and fo is not None:
-            ax[2].scatter(fa, fo, color=c, s=110, marker=mk, edgecolor="k",
-                          zorder=3, label=lbl)
-    ax[0].axhline(BASE_ASR, color="gray", ls=":", lw=1, label=f"baseline {BASE_ASR}")
-    ax[0].set(xlabel="step", ylabel="HarmBench ASR", title="Safety (↓ mejor)")
-    ax[0].legend(fontsize=7); ax[0].grid(alpha=.3)
-    if orr_bars:
-        bars = ax[1].bar(range(len(blbl)), bval, color=bcol, edgecolor="k", width=.6)
-        ax[1].set_xticks(range(len(blbl)))
-        ax[1].set_xticklabels(blbl, fontsize=7, rotation=15, ha="right")
-        ax[1].set(ylabel="XSTest over-refusal (final)", ylim=(0, 1),
-                  title="Over-refusal (↓ mejor)")
-        for b, v in zip(bars, bval):
-            ax[1].text(b.get_x() + b.get_width() / 2, v + .02, f"{v:.3f}",
-                       ha="center", fontsize=8)
-        ax[1].grid(alpha=.3, axis="y")
-    else:
-        ax[1].set(xlabel="step", ylabel="XSTest over-refusal", title="Over-refusal (↓ mejor)")
-        ax[1].legend(fontsize=7); ax[1].grid(alpha=.3)
-    if pareto:
-        ax[2].set(xlabel="HarmBench ASR (↓)", ylabel="over-refusal (↓)",
-                  title="Pareto final (inf-izq = ideal)")
-        if pareto_xlim: ax[2].set_xlim(*pareto_xlim)
-        if pareto_ylim: ax[2].set_ylim(*pareto_ylim)
-        ax[2].legend(fontsize=7); ax[2].grid(alpha=.3)
-    save(fig, out)
+            bars = ax[1].bar(range(len(blbl)), bval, color=bcol, edgecolor="k", width=.6)
+            ax[1].set_xticks(range(len(blbl)))
+            ax[1].set_xticklabels(blbl, fontsize=12, rotation=15, ha="right")
+            ax[1].set(ylabel="XSTest over-refusal (final)", ylim=(0, 1),
+                      title="Over-refusal (↓ mejor)")
+            for b, v in zip(bars, bval):
+                ax[1].text(b.get_x() + b.get_width() / 2, v + .02, f"{v:.3f}",
+                           ha="center", fontsize=12)
+            ax[1].grid(alpha=.3, axis="y")
+        else:
+            ax[1].set(xlabel="step", ylabel="XSTest over-refusal", title="Over-refusal (↓ mejor)")
+            ax[1].legend(); ax[1].grid(alpha=.3)
+        if pareto:
+            ax[2].set(xlabel="HarmBench ASR (↓)", ylabel="over-refusal (↓)",
+                      title="Pareto final (inf-izq = ideal)")
+            if pareto_xlim: ax[2].set_xlim(*pareto_xlim)
+            if pareto_ylim: ax[2].set_ylim(*pareto_ylim)
+            ax[2].legend(); ax[2].grid(alpha=.3)
+        save(fig, out)
 
 
 # --- P01: Alpaca sin safety, HarmBench keyword a lo largo del train ---
@@ -190,37 +195,44 @@ def p07():
 
 # --- P04: canned single 5% vs 15% (over-refusal en barras; Pareto escala fija) ---
 def p04():
-    items = [("exp_alpaca_canned5_single", "canned single 5%"),
-             ("exp_alpaca_canned_single", "canned single 15%")]
+    items = [("exp_a", "sin safety"),
+             ("exp_alpaca_canned5_single", "single 5%"),
+             ("exp_alpaca_canned_single", "single 15%")]
     cmap = plt.get_cmap("tab10")
-    fig, ax = plt.subplots(1, 3, figsize=(15.5, 4.6))
-    fig.suptitle("P04 — Canned single: 5% vs 15% (HarmBench / XSTest)",
-                 fontsize=13, fontweight="bold")
-    labels, orrs, cols = [], [], []
-    for i, (e, lbl) in enumerate(items):
-        c = cmap(i % 10)
-        xs, asr, _, _ = series(e); fa, fo, _ = final_point(e)
-        if xs:
-            ax[0].plot(xs, asr, "--", color=c, marker="o", ms=3, label=lbl, alpha=.85)
-        labels.append(lbl); orrs.append(fo if fo is not None else 0); cols.append(c)
-        if fa is not None and fo is not None:
-            ax[2].scatter(fa, fo, color=c, s=110, marker="s", edgecolor="k", zorder=3, label=lbl)
-    ax[0].axhline(BASE_ASR, color="gray", ls=":", lw=1, label=f"baseline {BASE_ASR}")
-    ax[0].set(xlabel="step", ylabel="HarmBench ASR", title="Safety (↓ mejor)")
-    ax[0].legend(fontsize=8); ax[0].grid(alpha=.3)
-    # over-refusal en BARRAS (solo hay dato final)
-    bars = ax[1].bar(range(len(labels)), orrs, color=cols, edgecolor="k", width=.55)
-    ax[1].set_xticks(range(len(labels))); ax[1].set_xticklabels(labels, fontsize=8)
-    ax[1].set(ylabel="XSTest over-refusal (final)", ylim=(0, 1),
-              title="Over-refusal (↓ mejor)")
-    for b, v in zip(bars, orrs):
-        ax[1].text(b.get_x() + b.get_width() / 2, v + .02, f"{v:.3f}", ha="center", fontsize=9)
-    ax[1].grid(alpha=.3, axis="y")
-    # Pareto a ESCALA FIJA amplia (no exagerar diferencias mínimas)
-    ax[2].set(xlabel="HarmBench ASR (↓)", ylabel="over-refusal (↓)",
-              xlim=(0, 0.6), ylim=(0, 1), title="Pareto final (escala fija)")
-    ax[2].legend(fontsize=8); ax[2].grid(alpha=.3)
-    save(fig, "P04_canned_single_5_15.png")
+    fonts = {"font.size": 14, "axes.titlesize": 16, "axes.labelsize": 15,
+             "xtick.labelsize": 13, "ytick.labelsize": 13, "legend.fontsize": 13}
+    with plt.rc_context(fonts):
+        fig, ax = plt.subplots(1, 3, figsize=(18, 5.6))
+        fig.suptitle("P04 — Canned single: 0% vs 5% vs 15% (HarmBench / XSTest)",
+                     fontsize=18, fontweight="bold")
+        labels, orrs, cols = [], [], []
+        for i, (e, lbl) in enumerate(items):
+            c = cmap(i % 10)
+            xs, asr, _, _ = series(e); fa, fo, _ = final_point(e)
+            if xs:
+                ax[0].plot(xs, asr, "--", color=c, marker="o", ms=4, label=lbl, alpha=.85)
+            labels.append(lbl); orrs.append(fo if fo is not None else 0); cols.append(c)
+            if fa is not None and fo is not None:
+                ax[2].scatter(fa, fo, color=c, s=160, marker="s", edgecolor="k", zorder=3, label=lbl)
+        ax[0].axhline(BASE_ASR, color="gray", ls=":", lw=1, label=f"baseline {BASE_ASR}")
+        ax[0].set(xlabel="step", ylabel="HarmBench ASR", title="Safety (↓ mejor)",
+                  ylim=(0, 1.0))
+        ax[0].legend(loc="upper right"); ax[0].grid(alpha=.3)
+        # over-refusal en BARRAS (solo hay dato final)
+        bars = ax[1].bar(range(len(labels)), orrs, color=cols, edgecolor="k", width=.55)
+        ax[1].set_xticks(range(len(labels)))
+        ax[1].set_xticklabels(labels, fontsize=12, rotation=12, ha="right")
+        ax[1].set(ylabel="XSTest over-refusal (final)", ylim=(0, 1),
+                  title="Over-refusal (↓ mejor)")
+        for b, v in zip(bars, orrs):
+            ax[1].text(b.get_x() + b.get_width() / 2, v + .02, f"{v:.3f}",
+                       ha="center", fontsize=13)
+        ax[1].grid(alpha=.3, axis="y")
+        # Pareto a ESCALA FIJA amplia (no exagerar diferencias mínimas)
+        ax[2].set(xlabel="HarmBench ASR (↓)", ylabel="over-refusal (↓)",
+                  xlim=(0, 0.6), ylim=(0, 1), title="Pareto final (escala fija)")
+        ax[2].legend(); ax[2].grid(alpha=.3)
+        save(fig, "P04_canned_single_5_15.png")
 
 
 # --- P05: canned single+pool, static vs dynamic (over-refusal en barras) ---
@@ -244,6 +256,17 @@ def p06():
          ("exp_dynamic_sa_pid", "dyn pid", "dyn"),
          ("exp_dynamic_sa_bandit", "dyn bandit", "dyn")],
         "P06_selfalign_static_vs_dynamic.png")
+
+
+# --- P06a: estáticos self-align (sin OR) por dosis + canned single 5% ---
+def p06a():
+    asr_xstest_panels(
+        "P06a — Estáticos self-align (sin OR): 0% / 5% / 15% vs canned single 5%",
+        [("exp_a", "sin safety", "static"),
+         ("exp_alpaca_sa5", "self-align 5%", "static"),
+         ("exp_alpaca_selfalign", "self-align 15%", "static"),
+         ("exp_alpaca_canned5_single", "canned single 5%", "static")],
+        "P06a_selfalign_doses_vs_canned.png")
 
 
 # --- P08: estático vs dinámico SIN reemplazo (barras; Pareto escala fija) ---
@@ -276,33 +299,34 @@ def p13():
              ("exp_alpaca_saO5", "SA 5% + OR-Bench", "C0", "-"),
              ("exp_alpaca_selfalign", "SA 15% (sin OR)", "C3", "--"),
              ("exp_alpaca_saO15", "SA 15% + OR-Bench", "C3", "-")]
-    fig, ax = plt.subplots(1, 3, figsize=(16, 4.7))
-    fig.suptitle("P13 — Estáticos self-align: con OR-Bench (anti-over-refusal) vs sin OR",
-                 fontsize=13, fontweight="bold")
-    pts = {}
-    for e, lbl, c, ls in specs:
-        xs, asr, xo, orr = series(e); fa, fo, _ = final_point(e)
-        if xs: ax[0].plot(xs, asr, ls, color=c, marker="o", ms=3, label=lbl, alpha=.85)
-        if xo: ax[1].plot(xo, orr, ls, color=c, marker="o", ms=3, label=lbl, alpha=.85)
-        if fa is not None and fo is not None:
-            ax[2].scatter(fa, fo, color=c, s=120, marker=("o" if ls == "-" else "s"),
-                          edgecolor="k", zorder=3, label=lbl)
-            pts[e] = (fa, fo)
-    # flechas sin-OR -> con-OR (muestran el desplazamiento)
-    for a, b in [("exp_alpaca_sa5", "exp_alpaca_saO5"),
-                 ("exp_alpaca_selfalign", "exp_alpaca_saO15")]:
-        if a in pts and b in pts:
-            ax[2].annotate("", xy=pts[b], xytext=pts[a],
-                           arrowprops=dict(arrowstyle="->", color="gray", lw=1.3))
-    ax[0].axhline(BASE_ASR, color="gray", ls=":", lw=1, label=f"baseline {BASE_ASR}")
-    ax[0].set(xlabel="step", ylabel="HarmBench ASR", title="Safety (↓ mejor)")
-    ax[0].legend(fontsize=7); ax[0].grid(alpha=.3)
-    ax[1].set(xlabel="step", ylabel="XSTest over-refusal", title="Over-refusal (↓ mejor)")
-    ax[1].legend(fontsize=7); ax[1].grid(alpha=.3)
-    ax[2].set(xlabel="HarmBench ASR (↓)", ylabel="over-refusal (↓)",
-              title="Pareto final (flecha = efecto OR-Bench)")
-    ax[2].legend(fontsize=7); ax[2].grid(alpha=.3)
-    save(fig, "P13_orbench_vs_plain_static.png")
+    with plt.rc_context(FONTS):
+        fig, ax = plt.subplots(1, 3, figsize=(17, 5.4))
+        fig.suptitle("P13 — Estáticos self-align: con OR-Bench (anti-over-refusal) vs sin OR",
+                     fontsize=17, fontweight="bold")
+        pts = {}
+        for e, lbl, c, ls in specs:
+            xs, asr, xo, orr = series(e); fa, fo, _ = final_point(e)
+            if xs: ax[0].plot(xs, asr, ls, color=c, marker="o", ms=4, label=lbl, alpha=.85)
+            if xo: ax[1].plot(xo, orr, ls, color=c, marker="o", ms=4, label=lbl, alpha=.85)
+            if fa is not None and fo is not None:
+                ax[2].scatter(fa, fo, color=c, s=150, marker=("o" if ls == "-" else "s"),
+                              edgecolor="k", zorder=3, label=lbl)
+                pts[e] = (fa, fo)
+        # flechas sin-OR -> con-OR (muestran el desplazamiento)
+        for a, b in [("exp_alpaca_sa5", "exp_alpaca_saO5"),
+                     ("exp_alpaca_selfalign", "exp_alpaca_saO15")]:
+            if a in pts and b in pts:
+                ax[2].annotate("", xy=pts[b], xytext=pts[a],
+                               arrowprops=dict(arrowstyle="->", color="gray", lw=1.6))
+        ax[0].axhline(BASE_ASR, color="gray", ls=":", lw=1, label=f"baseline {BASE_ASR}")
+        ax[0].set(xlabel="step", ylabel="HarmBench ASR", title="Safety (↓ mejor)")
+        ax[0].legend(); ax[0].grid(alpha=.3)
+        ax[1].set(xlabel="step", ylabel="XSTest over-refusal", title="Over-refusal (↓ mejor)")
+        ax[1].legend(); ax[1].grid(alpha=.3)
+        ax[2].set(xlabel="HarmBench ASR (↓)", ylabel="over-refusal (↓)",
+                  title="Pareto final (flecha = efecto OR-Bench)")
+        ax[2].legend(); ax[2].grid(alpha=.3)
+        save(fig, "P13_orbench_vs_plain_static.png")
 
 
 # --- P14: dinámicos con OR-Bench vs sin OR (sensor HarmBench) ---
@@ -311,31 +335,32 @@ def p14():
              ("exp_dynamic_hbo_deadband", "deadband + OR-Bench", "C0", "-"),
              ("exp_dynamic_hb_pid", "pid (sin OR)", "C3", "--"),
              ("exp_dynamic_hbo_pid", "pid + OR-Bench", "C3", "-")]
-    fig, ax = plt.subplots(1, 3, figsize=(16, 4.7))
-    fig.suptitle("P14 — Dinámicos (sensor HarmBench): con OR-Bench vs sin OR",
-                 fontsize=13, fontweight="bold")
-    pts = {}
-    for e, lbl, c, ls in specs:
-        xs, asr, xo, orr = series(e); fa, fo, _ = final_point(e)
-        if xs: ax[0].plot(xs, asr, ls, color=c, marker="o", ms=3, label=lbl, alpha=.85)
-        if xo: ax[1].plot(xo, orr, ls, color=c, marker="o", ms=3, label=lbl, alpha=.85)
-        if fa is not None and fo is not None:
-            ax[2].scatter(fa, fo, color=c, s=120, marker="o", edgecolor="k",
-                          zorder=3, label=lbl); pts[e] = (fa, fo)
-    for a, b in [("exp_dynamic_hb_deadband", "exp_dynamic_hbo_deadband"),
-                 ("exp_dynamic_hb_pid", "exp_dynamic_hbo_pid")]:
-        if a in pts and b in pts:
-            ax[2].annotate("", xy=pts[b], xytext=pts[a],
-                           arrowprops=dict(arrowstyle="->", color="gray", lw=1.3))
-    ax[0].axhline(BASE_ASR, color="gray", ls=":", lw=1, label=f"baseline {BASE_ASR}")
-    ax[0].set(xlabel="step", ylabel="HarmBench ASR", title="Safety (↓ mejor)")
-    ax[0].legend(fontsize=7); ax[0].grid(alpha=.3)
-    ax[1].set(xlabel="step", ylabel="XSTest over-refusal", title="Over-refusal (↓ mejor)")
-    ax[1].legend(fontsize=7); ax[1].grid(alpha=.3)
-    ax[2].set(xlabel="HarmBench ASR (↓)", ylabel="over-refusal (↓)",
-              title="Pareto final (flecha = efecto OR-Bench)")
-    ax[2].legend(fontsize=7); ax[2].grid(alpha=.3)
-    save(fig, "P14_orbench_vs_plain_dynamic.png")
+    with plt.rc_context(FONTS):
+        fig, ax = plt.subplots(1, 3, figsize=(17, 5.4))
+        fig.suptitle("P14 — Dinámicos (sensor HarmBench): con OR-Bench vs sin OR",
+                     fontsize=17, fontweight="bold")
+        pts = {}
+        for e, lbl, c, ls in specs:
+            xs, asr, xo, orr = series(e); fa, fo, _ = final_point(e)
+            if xs: ax[0].plot(xs, asr, ls, color=c, marker="o", ms=4, label=lbl, alpha=.85)
+            if xo: ax[1].plot(xo, orr, ls, color=c, marker="o", ms=4, label=lbl, alpha=.85)
+            if fa is not None and fo is not None:
+                ax[2].scatter(fa, fo, color=c, s=150, marker="o", edgecolor="k",
+                              zorder=3, label=lbl); pts[e] = (fa, fo)
+        for a, b in [("exp_dynamic_hb_deadband", "exp_dynamic_hbo_deadband"),
+                     ("exp_dynamic_hb_pid", "exp_dynamic_hbo_pid")]:
+            if a in pts and b in pts:
+                ax[2].annotate("", xy=pts[b], xytext=pts[a],
+                               arrowprops=dict(arrowstyle="->", color="gray", lw=1.6))
+        ax[0].axhline(BASE_ASR, color="gray", ls=":", lw=1, label=f"baseline {BASE_ASR}")
+        ax[0].set(xlabel="step", ylabel="HarmBench ASR", title="Safety (↓ mejor)")
+        ax[0].legend(); ax[0].grid(alpha=.3)
+        ax[1].set(xlabel="step", ylabel="XSTest over-refusal", title="Over-refusal (↓ mejor)")
+        ax[1].legend(); ax[1].grid(alpha=.3)
+        ax[2].set(xlabel="HarmBench ASR (↓)", ylabel="over-refusal (↓)",
+                  title="Pareto final (flecha = efecto OR-Bench)")
+        ax[2].legend(); ax[2].grid(alpha=.3)
+        save(fig, "P14_orbench_vs_plain_dynamic.png")
 
 
 # --- P15: Pareto maestro (todo: estáticos/dinámicos, con/sin OR) ---
@@ -526,7 +551,7 @@ def p20():
 
 if __name__ == "__main__":
     import shutil
-    for f in (p01, p02, p03, p04, p05, p06, p07, p08, p12, p13, p14, p15, p16, p17, p18, p19, p20):
+    for f in (p01, p02, p03, p04, p05, p06, p06a, p07, p08, p12, p13, p14, p15, p16, p17, p18, p19, p20):
         f()
     # Figuras que ya existían (generadas por plot_curves.py) se alían con nombre Pxx.
     aliases = {

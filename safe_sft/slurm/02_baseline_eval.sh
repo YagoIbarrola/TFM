@@ -41,6 +41,17 @@ python eval/run_harmbench.py \
     --step 0 \
     --epoch 0.0
 
+# XSTest del modelo base (over-refusal de partida; sin adapter) -> ancla del Pareto
+XSTEST_OUT="$WORK_DIR/results/baseline/xstest.json"
+echo ""
+echo "=== Baseline XSTest (over-refusal del base) ==="
+python eval/run_xstest.py \
+    --base_model "$MODEL_PATH" \
+    --output_path "$XSTEST_OUT" \
+    --batch_size 16 \
+    --step 0 \
+    --epoch 0.0
+
 echo ""
 echo "=== Baseline eval completo ==="
 
@@ -48,7 +59,8 @@ echo "=== Baseline eval completo ==="
 PROJ_RESULTS="$PROJECT_DIR/results/baseline"
 mkdir -p "$PROJ_RESULTS"
 cp "$OUTPUT_PATH" "$PROJ_RESULTS/harmbench.json"
-echo "Backup en: $PROJ_RESULTS/harmbench.json"
+[[ -f "$XSTEST_OUT" ]] && cp "$XSTEST_OUT" "$PROJ_RESULTS/xstest.json"
+echo "Backup en: $PROJ_RESULTS/"
 
 echo ""
 echo "Resumen rápido:"
