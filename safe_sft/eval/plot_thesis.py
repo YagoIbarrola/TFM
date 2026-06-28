@@ -4,9 +4,18 @@ Genera P01, P04, P05, P06, P08, P10, P12 en results/figures/.
 Uso: python eval/plot_thesis.py
 """
 import csv, os
+import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+# Grupos con 3 semillas (42 base + 43 + 44) para los experimentos con OR-Bench.
+SEED_GROUPS = [
+    ("static SA5 + OR", ["exp_alpaca_saO5", "exp_alpaca_saO5_s43", "exp_alpaca_saO5_s44"], "C0", "s"),
+    ("static SA15 + OR", ["exp_alpaca_saO15", "exp_alpaca_saO15_s43", "exp_alpaca_saO15_s44"], "C1", "D"),
+    ("dyn deadband + OR", ["exp_dynamic_hbo_deadband", "exp_dynamic_hbo_deadband_s43", "exp_dynamic_hbo_deadband_s44"], "C2", "o"),
+    ("dyn pid + OR", ["exp_dynamic_hbo_pid", "exp_dynamic_hbo_pid_s43", "exp_dynamic_hbo_pid_s44"], "C3", "^"),
+]
 
 RES = os.path.join(os.path.dirname(__file__), "..", "..", "results")
 FIG = os.path.join(RES, "figures")
@@ -408,9 +417,64 @@ def p17():
     save(fig, "P17_orbench_trayectorias_pareto.png")
 
 
+# --- P18: Pareto final con 3 semillas (tenue) + media ± std (grande) ---
+def p18():
+    fig, a = plt.subplots(figsize=(8.8, 6.3))
+    for lbl, exps, c, mk in SEED_GROUPS:
+        xs, ys = [], []
+        for e in exps:
+            fa, fo, _ = final_point(e)
+            if fa is not None and fo is not None:
+                xs.append(fa); ys.append(fo)
+        if not xs:
+            continue
+        a.scatter(xs, ys, color=c, marker=mk, s=55, alpha=.30, zorder=2)   # semillas
+        mx, my, sx, sy = np.mean(xs), np.mean(ys), np.std(xs), np.std(ys)
+        a.errorbar(mx, my, xerr=sx, yerr=sy, color=c, marker=mk, ms=14, mec="k",
+                   capsize=4, lw=1.6, zorder=4, label=f"{lbl} (n={len(xs)})")
+    a.axvline(BASE_ASR, color="gray", ls=":", lw=1)
+    a.text(BASE_ASR + .002, a.get_ylim()[0], "baseline ASR 0.085", rotation=90,
+           va="bottom", fontsize=7, color="gray")
+    a.set(xlabel="HarmBench ASR (↓ mejor)", ylabel="XSTest over-refusal (↓ mejor)",
+          title="P18 — Con OR-Bench: 3 semillas (tenue) + media ± std (grande)")
+    a.legend(fontsize=8); a.grid(alpha=.3)
+    save(fig, "P18_orbench_seeds_mean_pareto.png")
+
+
+# --- P19: trayectorias media ± std sobre las 3 semillas ---
+def p19():
+    def agg(exps, kind):
+        by = {}
+        for e in exps:
+            xs, asr, xo, orr = series(e)
+            pairs = zip(xs, asr) if kind == "asr" else zip(xo, orr)
+            for s, v in pairs:
+                by.setdefault(s, []).append(v)
+        steps = sorted(s for s, v in by.items() if len(v) >= 2)
+        m = np.array([np.mean(by[s]) for s in steps])
+        sd = np.array([np.std(by[s]) for s in steps])
+        return steps, m, sd
+
+    fig, ax = plt.subplots(1, 2, figsize=(13.5, 4.9))
+    fig.suptitle("P19 — Con OR-Bench: media ± std de 3 semillas durante el entrenamiento",
+                 fontsize=13, fontweight="bold")
+    for lbl, exps, c, _ in SEED_GROUPS:
+        for j, kind in enumerate(("asr", "orr")):
+            st, m, sd = agg(exps, kind)
+            if st:
+                ax[j].plot(st, m, color=c, marker="o", ms=3, lw=1.4, label=lbl, alpha=.9)
+                ax[j].fill_between(st, m - sd, m + sd, color=c, alpha=.13)
+    ax[0].axhline(BASE_ASR, color="gray", ls=":", lw=1, label=f"baseline {BASE_ASR}")
+    ax[0].set(xlabel="step", ylabel="HarmBench ASR", title="Safety (↓ mejor)")
+    ax[0].legend(fontsize=7); ax[0].grid(alpha=.3)
+    ax[1].set(xlabel="step", ylabel="XSTest over-refusal", title="Over-refusal (↓ mejor)")
+    ax[1].legend(fontsize=7); ax[1].grid(alpha=.3)
+    save(fig, "P19_orbench_mean_trajectories.png")
+
+
 if __name__ == "__main__":
     import shutil
-    for f in (p01, p02, p03, p04, p05, p06, p07, p08, p12, p13, p14, p15, p16, p17):
+    for f in (p01, p02, p03, p04, p05, p06, p07, p08, p12, p13, p14, p15, p16, p17, p18, p19):
         f()
     # Figuras que ya existían (generadas por plot_curves.py) se alían con nombre Pxx.
     aliases = {
