@@ -513,9 +513,6 @@ def p20():
         ("deadband", "C2", "o", [
             ("×1 (~0.085)", ["exp_dynamic_hbo_deadband", "exp_dynamic_hbo_deadband_s43", "exp_dynamic_hbo_deadband_s44"]),
             ("×2 (~0.17)", ["exp_dynamic_hbo_deadband_m2", "exp_dynamic_hbo_deadband_m2_s43", "exp_dynamic_hbo_deadband_m2_s44"])]),
-        ("pid", "C3", "^", [
-            ("×1 (~0.085)", ["exp_dynamic_hbo_pid", "exp_dynamic_hbo_pid_s43", "exp_dynamic_hbo_pid_s44"]),
-            ("×2 (~0.17)", ["exp_dynamic_hbo_pid_m2", "exp_dynamic_hbo_pid_m2_s43", "exp_dynamic_hbo_pid_m2_s44"])]),
     ]
     # estáticos con OR: frente de dosis (5% -> 15%)
     statics = ("static + OR", "C0", "s", [
@@ -540,11 +537,18 @@ def p20():
         if len(mxs) >= 2:
             lbl = f"{ctrl} ({sweep} sweep)" if ctrl == "static + OR" else f"dyn {ctrl} (target sweep)"
             a.plot(mxs, mys, color=c, lw=1.8, alpha=.8, label=lbl)
+    # Baseline: SFT sin safety (Alpaca 0%) — punto de partida del alignment-tax
+    ba, bo, _ = final_point("exp_a")
+    if ba is not None and bo is not None:
+        a.scatter([ba], [bo], color="k", marker="*", s=240, zorder=6,
+                  label="baseline (SFT sin safety)")
+        a.annotate("Alpaca 0%", (ba, bo), fontsize=8, xytext=(-8, 8),
+                   textcoords="offset points", ha="right", color="k")
     a.axvline(BASE_ASR, color="gray", ls=":", lw=1)
     a.text(BASE_ASR + .002, a.get_ylim()[0], "baseline ASR 0.085", rotation=90,
            va="bottom", fontsize=7, color="gray")
     a.set(xlabel="HarmBench ASR (↓ mejor)", ylabel="XSTest over-refusal (↓ mejor)",
-          title="P20 — Pareto con OR-Bench: dinámico (barrido target) vs estático (barrido dosis), media±std n=3")
+          title="P20 — Pareto con OR-Bench: dinámico vs estático + baseline SFT sin safety (media±std n=3)")
     a.legend(fontsize=9); a.grid(alpha=.3)
     save(fig, "P20_dynamic_pareto_front.png")
 
