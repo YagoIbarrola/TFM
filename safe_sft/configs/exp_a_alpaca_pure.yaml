@@ -1,0 +1,61 @@
+# Experimento A — SFT puro sobre Alpaca (sin datos de seguridad)
+# Replica el setup de Qi et al. (2024) sobre Llama 3.2 3B Instruct.
+
+experiment_name: exp_a_alpaca_pure
+
+# Rutas (relativas al WORK_DIR del cluster, resueltas dinámicamente por train.py)
+train_dataset: data/alpaca_train
+eval_dataset:  data/alpaca_val
+output_dir:    results/exp_a
+
+# Modelo base (en WORK_DIR/models)
+model_path: models/Llama-3.2-3B-Instruct
+
+# LoRA
+peft:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: none
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  task_type: CAUSAL_LM
+
+# Entrenamiento (TRL SFTConfig)
+training:
+  num_train_epochs: 3
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 8
+  gradient_accumulation_steps: 4        # batch efectivo = 16
+
+  learning_rate: 2.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+
+  bf16: true
+  fp16: false
+  gradient_checkpointing: false          # H100 96GB tiene memoria de sobra
+
+  save_strategy: steps
+  save_steps: 1000
+  save_total_limit: 12                   # mantiene todos los ~22 checkpoints
+
+  eval_strategy: steps
+  eval_steps: 500
+  logging_steps: 10
+
+  dataloader_num_workers: 4
+  seed: 42
+
+# SFT-specific
+sft:
+  max_length: 1024                        # TRL >=0.13 (antes era max_seq_length)
+  dataset_text_field: text
+  packing: false                          # un ejemplo por secuencia (comparable con Qi et al.)
+
+# Logging
+wandb:
+  project: safe_sft_tfm
+  run_name: exp_a_alpaca_pure
+  tags: [exp_a, alpaca, no_safety, llama32_3b]

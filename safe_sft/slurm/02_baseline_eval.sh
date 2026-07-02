@@ -4,12 +4,11 @@
 # Lanzar:  sbatch slurm/02_baseline_eval.sh
 # ===========================================================================
 #SBATCH --job-name=baseline_eval
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:1
+#SBATCH --partition=gpuMax
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:nvidia_h100_nvl:1
 #SBATCH --time=02:30:00
 #SBATCH --output=logs/baseline_eval_%j.out
 #SBATCH --error=logs/baseline_eval_%j.err
@@ -42,6 +41,17 @@ python eval/run_harmbench.py \
     --step 0 \
     --epoch 0.0
 
+# XSTest del modelo base (over-refusal de partida; sin adapter) -> ancla del Pareto
+XSTEST_OUT="$WORK_DIR/results/baseline/xstest.json"
+echo ""
+echo "=== Baseline XSTest (over-refusal del base) ==="
+python eval/run_xstest.py \
+    --base_model "$MODEL_PATH" \
+    --output_path "$XSTEST_OUT" \
+    --batch_size 16 \
+    --step 0 \
+    --epoch 0.0
+
 echo ""
 echo "=== Baseline eval completo ==="
 
@@ -49,7 +59,8 @@ echo "=== Baseline eval completo ==="
 PROJ_RESULTS="$PROJECT_DIR/results/baseline"
 mkdir -p "$PROJ_RESULTS"
 cp "$OUTPUT_PATH" "$PROJ_RESULTS/harmbench.json"
-echo "Backup en: $PROJ_RESULTS/harmbench.json"
+[[ -f "$XSTEST_OUT" ]] && cp "$XSTEST_OUT" "$PROJ_RESULTS/xstest.json"
+echo "Backup en: $PROJ_RESULTS/"
 
 echo ""
 echo "Resumen rápido:"

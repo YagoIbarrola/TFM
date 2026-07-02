@@ -1,0 +1,64 @@
+# Régimen DINÁMICO con controlador BANDIT (ε-greedy no estacionario) — Alpaca +
+# safety canned-single. Brazos = ratios discretos; recompensa asimétrica + coste
+# de ratio. Mismo pool/setup que exp_dynamic_canned_single para comparar.
+# Para cambiar el pool de safety, edita dynamic.safety_dataset.
+
+experiment_name: exp_dynamic_bandit
+
+train_dataset: data/alpaca_train
+eval_dataset:  data/alpaca_val
+output_dir:    results/exp_dynamic_bandit
+
+model_path: models/Llama-3.2-3B-Instruct
+
+peft:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: none
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  task_type: CAUSAL_LM
+
+training:
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  bf16: true
+  fp16: false
+  logging_steps: 50
+  seed: 42
+
+sft:
+  max_length: 1024
+
+dynamic:
+  base_dataset:   data/alpaca_train
+  safety_dataset: data/beavertails_canned_single_train   # configurable
+  heldout_asr:    data/beavertails_asr_heldout
+
+  total_steps: 9000
+  round_steps: 500
+
+  start_ratio: 0.10        # no usado por bandit (elige brazo), se mantiene por esquema
+  min_ratio:   0.0
+  max_ratio:   0.30
+  target_asr:  0.20
+
+  controller:
+    type: bandit
+    arms: [0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30]
+    epsilon: 0.2
+    alpha: 0.3
+    w_high: 2.0          # penaliza más ASR por encima del target (inseguro)
+    ratio_cost: 0.3      # coste por ratio (prefiere menos safety)
+
+  asr_heldout_batch_size: 32
+  asr_max_new_tokens: 128
+
+wandb:
+  project: safe_sft_tfm
+  run_name: exp_dynamic_bandit
+  tags: [alpaca, dynamic, bandit, eps_greedy, canned_single, llama32_3b]

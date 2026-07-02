@@ -1,0 +1,62 @@
+# CONTROL — dinámico con ratio FIJO 15% + muestreo sin reemplazo.
+# Sirve para comparar EN IGUALDAD DE CONDICIONES con el estático 15%
+# (exp_alpaca_selfalign): mismo ratio, mismo pool, misma cobertura (sin reemplazo),
+# mismos pasos (~10890 ≈ 3 épocas de Alpaca+15%). Si la perplexity se alinea con
+# la del estático, el bucle de train_dynamic es fiel; si no, queda implementación
+# por ajustar.
+
+experiment_name: exp_dynamic_sa_fixed15
+
+train_dataset: data/alpaca_train
+eval_dataset:  data/alpaca_val
+output_dir:    results/exp_dynamic_sa_fixed15
+
+model_path: models/Llama-3.2-3B-Instruct
+
+peft:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: none
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  task_type: CAUSAL_LM
+
+training:
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  bf16: true
+  fp16: false
+  logging_steps: 50
+  seed: 42
+
+sft:
+  max_length: 1024
+
+dynamic:
+  base_dataset:   data/alpaca_train
+  safety_dataset: data/beavertails_selfalign_train
+  heldout_asr:    data/beavertails_asr_heldout
+
+  total_steps: 10890        # ≈ 3 épocas de Alpaca(49375)+15% safety, batch_eff=16
+  round_steps: 500
+
+  start_ratio: 0.15
+  min_ratio:   0.15
+  max_ratio:   0.15
+  target_asr:  0.20
+
+  controller:
+    type: fixed
+    ratio: 0.15
+
+  asr_heldout_batch_size: 32
+  asr_max_new_tokens: 128
+
+wandb:
+  project: safe_sft_tfm
+  run_name: exp_dynamic_sa_fixed15
+  tags: [alpaca, dynamic, fixed15, control, selfalign, llama32_3b]

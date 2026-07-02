@@ -1,0 +1,48 @@
+# Self-align estático — MetaMath + 5% respuestas ideales auto-generadas.
+experiment_name: exp_math_sa5
+
+train_dataset: data/metamath_selfalign_5
+eval_dataset:  data/metamath_val
+output_dir:    results/exp_math_sa5
+
+model_path: models/Llama-3.2-3B-Instruct
+
+peft:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: none
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  task_type: CAUSAL_LM
+
+training:
+  num_train_epochs: 3
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 8
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  bf16: true
+  fp16: false
+  gradient_checkpointing: false
+  save_strategy: steps
+  save_steps: 1000
+  save_total_limit: 12
+  eval_strategy: steps
+  eval_steps: 500
+  logging_steps: 10
+  dataloader_num_workers: 4
+  seed: 42
+
+sft:
+  max_length: 1024
+  dataset_text_field: text
+  packing: false
+
+wandb:
+  project: safe_sft_tfm
+  run_name: exp_math_sa5
+  tags: [metamath, safety_5, selfalign, llama32_3b, factorial]

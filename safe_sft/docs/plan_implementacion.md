@@ -12,12 +12,15 @@
 safe_sft/
 ├── configs/
 │   ├── base.yaml               # hiperparámetros comunes
-│   ├── exp_a_pure_sft.yaml     # Experimento A: SFT puro
-│   └── exp_b_mixed_sft.yaml    # Experimento B: SFT mixto 15%
+│   ├── exp_a_alpaca_pure.yaml  # Exp A: Alpaca puro (general · sin safety)
+│   ├── exp_b_alpaca_mixed.yaml # Exp B: Alpaca + 15% safety
+│   ├── exp_c_math_pure.yaml    # Exp C: MetaMathQA puro (narrow · sin safety)
+│   └── exp_d_math_mixed.yaml   # Exp D: MetaMathQA + 15% safety
 ├── data/
 │   ├── prepare_alpaca.py       # descarga y tokeniza Alpaca
+│   ├── prepare_metamath.py     # descarga y submuestrea MetaMathQA a 52k
 │   ├── prepare_beavertails.py  # filtra is_safe=True de BeaverTails-30k
-│   └── mix_datasets.py        # mezcla Alpaca + BeaverTails al ratio indicado
+│   └── mix_datasets.py        # mezcla {Alpaca|Math} + BeaverTails al ratio indicado
 ├── train/
 │   ├── train.py               # script principal de entrenamiento (TRL SFTTrainer)
 │   └── callbacks.py           # SaveAndEvalCallback: guarda checkpoint y lanza eval
@@ -25,6 +28,7 @@ safe_sft/
 │   ├── run_harmbench.py       # eval DirectRequest (curva fina, todos los checkpoints)
 │   ├── run_human_jailbreaks.py # eval con HumanJailbreaks de HarmBench (mismo coste)
 │   ├── run_pair.py            # eval PAIR sobre checkpoints clave (más caro)
+│   ├── run_capability.py      # eval capacidad (Alpaca-eval / GSM8K accuracy)
 │   └── aggregate_results.py   # consolida resultados de todos los checkpoints en CSV
 ├── analysis/
 │   ├── plot_curves.py         # genera gráficas de seguridad y task performance
@@ -33,8 +37,10 @@ safe_sft/
 ├── slurm/
 │   ├── 00_setup.sh            # entorno conda/pip en el cluster
 │   ├── 01_prepare_data.sh     # job de preprocesado de datos
-│   ├── 02_train_exp_a.sh      # job de entrenamiento Experimento A
-│   ├── 02_train_exp_b.sh      # job de entrenamiento Experimento B
+│   ├── 02_train_exp_a.sh      # job entrenamiento Exp A (Alpaca puro)
+│   ├── 02_train_exp_b.sh      # job entrenamiento Exp B (Alpaca + safety)
+│   ├── 02_train_exp_c.sh      # job entrenamiento Exp C (Math puro)
+│   ├── 02_train_exp_d.sh      # job entrenamiento Exp D (Math + safety)
 │   ├── 03_eval_checkpoint.sh  # job de evaluación DirectRequest por checkpoint (array)
 │   ├── 04_aggregate.sh        # job de agregación de resultados
 │   ├── 05_eval_human_jb.sh    # job array de eval con HumanJailbreaks (todos los chkpt)
@@ -47,7 +53,26 @@ safe_sft/
 
 ---
 
-## 2. Fases de Implementación
+## 2. Diseño Experimental — Factorial 2×2
+
+El TFM se estructura como un experimento factorial 2×2 sobre dos ejes:
+
+|  | **Sin safety mix** | **Con 15% safety mix** |
+|---|---|---|
+| **Tarea general (Alpaca)** | **Exp A** — replica Qi et al. (2024) | **Exp B** — pregunta original del TFM |
+| **Tarea narrow (MetaMathQA)** | **Exp C** — testa Chen et al. (2025) | **Exp D** — generalización del mix |
+
+Este diseño permite responder dos preguntas con un único entorno experimental:
+
+1. **¿El dominio importa?** Comparar A vs C (y B vs D) revela si la degradación es función del dominio o del acto de SFT en sí.
+2. **¿La mezcla funciona uniformemente?** Comparar A vs B (y C vs D) mide la efectividad del 15% de safety mix. Si funciona en Alpaca pero no en Math, la mitigación es dependiente del dominio.
+
+**Hipótesis competidoras:**
+- **H1 (Chen et al. 2025):** Math degrada más que Alpaca por menor solapamiento con datos de safety alignment.
+- **H2 (Bianchi et al. 2024):** Dominios narrow degradan más por baja diversidad.
+- **H3 (nula):** Degradación equivalente → el problema es el SFT en sí, no el contenido.
+
+## 3. Fases de Implementación
 
 ### Fase 0 — Setup del entorno (≈ 3–5 días)
 
@@ -58,25 +83,29 @@ safe_sft/
 | Crear entorno conda con PyTorch + TRL + lm-evaluation-harness | `00_setup.sh` | `environment.yml` |
 | Descargar Llama 3.2 3B desde HuggingFace | `huggingface-cli` | pesos en `/scratch/` |
 | Preparar Alpaca (52k instrucciones) | `prepare_alpaca.py` | `data/alpaca_tokenized/` |
+| Preparar MetaMathQA submuestreado a 52k | `prepare_metamath.py` | `data/metamath_52k/` |
 | Preparar BeaverTails-30k (filtrar `is_safe=True`) | `prepare_beavertails.py` | `data/beavertails_safe/` |
-| Mezcla Alpaca + BeaverTails al 15% | `mix_datasets.py` | `data/mixed_15pct/` |
-| Evaluación de seguridad **baseline** (modelo sin fine-tuning) | `run_harmbench.py` | `results/baseline.json` |
+| Mezcla Alpaca + BeaverTails al 15% | `mix_datasets.py` | `data/alpaca_mixed_15/` |
+| Mezcla MetaMath + BeaverTails al 15% | `mix_datasets.py` | `data/math_mixed_15/` |
+| Eval seguridad **baseline** (modelo sin fine-tuning) | `run_harmbench.py` | `results/baseline/harmbench.json` |
+| Eval capacidad baseline (GSM8K, Alpaca-eval) | `run_capability.py` | `results/baseline/capability.json` |
 
 **Decisiones de diseño:**
-- Se usa **BeaverTails-30k** (no el dataset completo de 330k) para mantener el coste de preprocesado manejable. El 15% de mezcla equivale a ~7700 ejemplos seguros entre las 52k de Alpaca.
-- El baseline se evalúa con HarmBench completo (400+ prompts) para establecer el punto de partida de ambos experimentos.
+- **MetaMathQA** se elige sobre GSM8K (7.5k es muy pequeño) y MATH (12k, demasiado competitivo). Submuestreamos a 52k para igualar Alpaca y garantizar que el efecto observado no se debe al tamaño del dataset.
+- El 15% de mezcla equivale a ~9170 ejemplos seguros entre los 52k de tarea, en ambos experimentos B y D (consistencia).
+- El baseline se evalúa con HarmBench completo (~300 prompts directos + HJ + PAIR) y con benchmarks de capacidad (GSM8K para math, Alpaca-eval para general).
 
 ---
 
-### Fase 1 — Experimento A: SFT puro (≈ 1 semana)
+### Fase 1 — Eje Alpaca: Experimentos A y B (≈ 1-2 semanas)
 
-**Objetivo:** curva de degradación de seguridad a lo largo de 3 epochs de fine-tuning sobre Alpaca sin ningún dato de seguridad.
+**Objetivo:** trazar las curvas de degradación de seguridad sobre tarea general, con y sin mezcla de safety. Es el backbone del TFM y replica/extiende Qi et al. (2024).
 
-**Hiperparámetros (config `exp_a_pure_sft.yaml`):**
+**Hiperparámetros comunes (config `exp_a_alpaca_pure.yaml`, idéntico para B salvo `dataset_path`):**
 
 ```yaml
 model: meta-llama/Llama-3.2-3B-Instruct
-dataset: data/alpaca_tokenized/
+dataset_path: data/alpaca/              # B: data/alpaca_mixed_15/
 epochs: 3
 per_device_train_batch_size: 4
 gradient_accumulation_steps: 4     # batch efectivo = 16
@@ -93,28 +122,30 @@ save_strategy: steps
 save_steps: 500
 eval_on_save: true                  # lanza eval HarmBench en cada checkpoint
 logging_steps: 10
-output_dir: results/exp_a/
+output_dir: results/exp_a/          # B: results/exp_b/
 ```
 
-**Estimación de recursos y tiempo (A100 80GB):**
-- ~3250 pasos/epoch × 3 epochs = **~9750 pasos totales**
-- Checkpoint cada 500 pasos → **~19 checkpoints intermedios + 3 de epoch = 22 puntos de evaluación**
-- Tiempo de entrenamiento: ~6–8 h en 1× A100
-- Tiempo de evaluación HarmBench por checkpoint: ~20–40 min en 1× A100
-- Evaluación total (array job 22 slots): ~8–15 h en paralelo con 2–4 slots simultáneos
+**Estimación de recursos y tiempo (H100 96GB):**
+- ~3250 pasos/epoch × 3 epochs = **~9750 pasos totales** (algo más en Exp B por el 15% extra)
+- Checkpoint cada 500 pasos → **~22 puntos de evaluación por experimento**
+- Tiempo de entrenamiento: ~4–6 h por experimento en H100
+- Tiempo de evaluación HarmBench DirectRequest por checkpoint: ~10–20 min en H100
+- Evaluación total (array job 22 slots): ~5–8 h en paralelo
 
 ---
 
-### Fase 2 — Experimento B: SFT mixto (≈ 1 semana)
+### Fase 2 — Eje Math: Experimentos C y D (≈ 1-2 semanas)
 
-**Objetivo:** reproducir exactamente el experimento A pero con el 15% de BeaverTails (is_safe=True) mezclado en el dataset.
+**Objetivo:** repetir el diseño de Fase 1 sobre MetaMathQA en lugar de Alpaca, manteniendo todo lo demás idéntico. Esto cierra el factorial 2×2.
 
-**Cambios respecto a Exp. A:**
-- `dataset: data/mixed_15pct/` (Alpaca + ~7700 ejemplos seguros de BeaverTails)
-- Ratio de mezcla controlado con semilla fija para reproducibilidad
-- Resto de hiperparámetros **idénticos** para garantizar comparabilidad
+**Cambios respecto a Fase 1:**
+- `dataset_path: data/metamath_52k/` (C) o `data/math_mixed_15/` (D)
+- **Mismos hiperparámetros, misma semilla, mismo schedule de checkpoints, misma evaluación.**
+- La única variable independiente entre Fase 1 y Fase 2 es el **dominio del dataset de entrenamiento**.
 
-**Mismo número de checkpoints y mismos puntos de evaluación que Exp. A.**
+**Comparabilidad:** la igualdad de tamaño (52k) y de tokens efectivos por epoch garantiza que cualquier diferencia observada en las curvas A vs C (o B vs D) es atribuible al dominio, no al volumen de SFT.
+
+**Métrica de capacidad adicional para C/D:** accuracy en GSM8K (separado del conjunto de entrenamiento) en cada checkpoint, para verificar que el SFT efectivamente está mejorando la capacidad matemática objetivo.
 
 ---
 
@@ -166,20 +197,29 @@ results/exp_a/eval_step1000/
 
 ---
 
-### Fase 3 — Análisis y visualización (≈ 3–5 días)
+### Fase 3 — Análisis factorial 2×2 (≈ 5–7 días)
 
-**Objetivo:** identificar el punto de inflexión y comparar las dos curvas.
+**Objetivo:** comparar las cuatro condiciones (A, B, C, D) bajo los tres niveles de ataque y aislar los efectos del **dominio** y del **safety mix**.
 
 | Análisis | Script | Output |
 |---|---|---|
-| Curva de seguridad epoch-by-epoch (A y B, DirectRequest) | `plot_curves.py` | `figs/security_curves.pdf` |
-| Curva de robustez epoch-by-epoch (HumanJailbreaks) | `plot_robustness.py` | `figs/robustness_hj.pdf` |
-| Snapshots PAIR (puntos discretos sobre las curvas) | `plot_robustness.py` | `figs/robustness_pair.pdf` |
-| Curva de task performance (perplexity / instruction-following) | `plot_curves.py` | `figs/task_curves.pdf` |
-| Detección del punto de inflexión en curva A (por método de ataque) | `find_inflection.py` | `results/inflection_report.json` |
-| Tabla comparativa A vs B × {DirectRequest, HumanJailbreaks, PAIR} | `aggregate_results.py` | `results/summary_table.csv` |
+| Curvas de seguridad de los 4 experimentos (DirectRequest) | `plot_curves.py` | `figs/curves_direct_2x2.pdf` |
+| Curvas de robustez (HumanJailbreaks) | `plot_robustness.py` | `figs/curves_hj_2x2.pdf` |
+| Snapshots PAIR superpuestos a las curvas | `plot_robustness.py` | `figs/curves_pair_2x2.pdf` |
+| Curva de capacidad por dominio (Alpaca-eval, GSM8K) | `plot_curves.py` | `figs/capability_curves.pdf` |
+| Detección del punto de inflexión por experimento y ataque | `find_inflection.py` | `results/inflection_report.json` |
+| **Tabla factorial 2×2** (rows: dominio, cols: mix; cells: ΔASR final) | `aggregate_results.py` | `results/factorial_table.csv` |
+| **Test estadístico del efecto del dominio** (ANOVA o equivalente) | `aggregate_results.py` | `results/effects_test.json` |
 
-**Métrica principal:** Attack Success Rate (ASR) bajo tres niveles de ataque. La hipótesis fuerte es que la mezcla del 15% mitiga DirectRequest fácilmente, pero su efecto sobre HJ y PAIR es el resultado científicamente más interesante.
+**Métricas principales:**
+- **ΔASR_epoch3 = ASR(checkpoint final) − ASR(baseline)** — la magnitud total de degradación.
+- **t_infl = step donde dASR/dstep supera umbral** — momento del colapso.
+- **Capability gain** = mejora en la métrica de tarea objetivo (GSM8K para C/D, Alpaca-eval para A/B).
+
+**Resultados esperados (predicciones para validar):**
+- Si **H1 (Chen)** se confirma: ΔASR(C) > ΔASR(A) y ΔASR(D) > ΔASR(B) → math degrada más en ambas condiciones.
+- Si **H2 (Bianchi)** se confirma: efecto del dominio se atenúa cuando hay safety mix (B−A ≠ D−C) → la mezcla compensa el efecto narrow.
+- Si **H3 (nula)** se confirma: ambas curvas A/C convergen → la degradación es invariante al dominio.
 
 ---
 
@@ -278,7 +318,7 @@ Idéntico a `03_eval_checkpoint.sh` pero invocando `run_human_jailbreaks.py`. Co
 
 ```bash
 #SBATCH --array=0-21
-#SBATCH --gres=H_100_NVL
+#SBATCH --gres=gpu:nvidia_h100_nvl:1
 #SBATCH --time=02:00:00
 python eval/run_human_jailbreaks.py \
     --base_model "$BASE_MODEL" \
@@ -292,7 +332,7 @@ python eval/run_human_jailbreaks.py \
 Job que evalúa un único checkpoint con PAIR. Se lanza manualmente para 4 checkpoints por experimento (baseline, fin epoch 1/2/3).
 
 ```bash
-#SBATCH --gres=H_100_NVL
+#SBATCH --gres=gpu:nvidia_h100_nvl:1
 #SBATCH --time=10:00:00         # PAIR es lento
 #SBATCH --mem=32G
 
@@ -387,20 +427,23 @@ results = lm_eval.simple_evaluate(
 
 ## 5. Experimentos Adicionales (Opcionales)
 
-Una vez completados los experimentos A y B, las siguientes extensiones tienen coste incremental bajo:
+Una vez completado el factorial 2×2 principal, las siguientes extensiones tienen coste incremental moderado:
 
-### Exp. C — Ablación del ratio de mezcla
+### Ablación del ratio de mezcla (sobre uno o ambos dominios)
 
-Entrenar con ratios del 5%, 10%, 20% además del 15% para trazar la curva ratio → degradación.
-Implementación: un job array sobre `configs/exp_c_ratio_{r}.yaml` variando sólo el parámetro `ratio`.
+Entrenar con ratios del 5%, 10%, 20% además del 15% — al menos sobre el eje donde la mezcla del 15% haya resultado efectiva. Implementación: un job array sobre `configs/exp_{a,c}_ratio_{r}.yaml`.
 
-### Exp. D — Baseline Safe LoRA
+### Tercer dominio: código
 
-Reimplementar el método de Hsu et al. (2024) como baseline competidor. Permite medir si Safe LoRA supera o iguala la mezcla simple de datos.
+Añadir un eje **Code** (con un dataset tipo Magicoder o CodeAlpaca) para fortalecer el análisis del efecto del dominio. Convierte el 2×2 en un 3×2 (3 dominios × 2 mix).
 
-### Exp. E — Transferencia a Qwen 2.5 3B
+### Baseline Safe LoRA (Hsu et al. 2024)
 
-Repetir el experimento A con Qwen 2.5 3B para validar si el punto de inflexión es específico de la arquitectura o generalizable.
+Reimplementar como baseline competidor. Permite contrastar la mezcla simple de datos contra una mitigación más sofisticada.
+
+### Transferencia a otra arquitectura
+
+Repetir Exp A o Exp C con Qwen 2.5 3B para validar si los efectos observados son específicos de Llama o generalizables.
 
 ---
 
@@ -426,12 +469,14 @@ seed = 42  # en train.py, data loaders y splits de evaluación
 
 | Semana | Trabajo |
 |---|---|
-| **S1** | Fase 0: setup cluster, descarga de pesos, preprocesado de datos, evaluación baseline |
-| **S2** | Fase 1: lanzamiento Exp. A, depuración del pipeline de entrenamiento + evaluación DirectRequest |
-| **S3** | Fase 2: lanzamiento Exp. B en paralelo, corrección de errores de Exp. A si los hay |
-| **S4** | Fase 2.5: implementación HumanJailbreaks + PAIR, lanzamiento sobre todos los checkpoints / snapshots clave |
-| **S5** | Fase 3: análisis, gráficas (curvas DR + HJ + snapshots PAIR), detección del punto de inflexión, tabla comparativa |
-| **S6+** | (Opcional) Experimentos C/D/E · Redacción de la memoria · Publicación del repositorio |
+| **S1** | Fase 0: setup cluster, descarga de pesos, preprocesado de datos (Alpaca, MetaMath, BeaverTails, mezclas), evaluación baseline |
+| **S2** | Fase 1: lanzamiento Exp A (Alpaca puro), depuración del pipeline de entrenamiento + evaluación DirectRequest |
+| **S3** | Fase 1: lanzamiento Exp B (Alpaca + safety) en paralelo, corrección de errores si los hay |
+| **S4** | Fase 2: lanzamiento Exp C (Math puro) — pipeline ya depurado |
+| **S5** | Fase 2: lanzamiento Exp D (Math + safety) en paralelo a C |
+| **S6** | Fase 2.5: HumanJailbreaks (todos los checkpoints de los 4 experimentos) + PAIR (4 snapshots × 4 exp = 16 evaluaciones) |
+| **S7** | Fase 3: análisis factorial 2×2, gráficas, test estadístico, tabla resumen |
+| **S8+** | Redacción memoria · publicación repositorio · (opcional) extensiones |
 
 ---
 
@@ -447,3 +492,6 @@ seed = 42  # en train.py, data loaders y splits de evaluación
 | PAIR se descontrola en tiempo de ejecución (LLM atacante itera demasiado) | Media | Limitar `n_iterations=5` y `n_streams=5`; usar subset de 100 behaviors; timeout duro de 10h en el job |
 | HumanJailbreaks tan agresivos que ocultan la curva de degradación (ASR cerca de 1 desde el inicio) | Media | Reportar también ASR por jailbreak individual; si el "peor caso" satura, usar la media |
 | PAIR requiere LLM atacante adicional cargado en GPU | Baja | Llama-3.1-8B-Instruct cabe junto a Llama-3.2-3B en H100 96GB sin problemas |
+| Confound del formato CoT entre Math y Alpaca (respuestas math son CoT largo) | Media | Reportar también ASR sobre subset de prompts no-CoT; análisis adicional de longitud de respuesta |
+| Llama 3.2 3B baseline ya es bueno en math → capability gain bajo en C/D | Media | Si GSM8K no se mueve, usar MATH (más difícil) como métrica complementaria |
+| Coste total de los 4 experimentos × 3 ataques > cuota cluster | Alta | Priorizar A→B→C→D en ese orden; si se agota tiempo, reportar parcial (al menos A vs C es publicable) |
